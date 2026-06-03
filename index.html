@@ -501,6 +501,7 @@ function SuiviMensuel({data,setData,go,ghMaj}){
 function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj}){
   const reco=insights(c,data); const spark=hist.map(h=>h.cf);
   const avoirs=[...data.patrimoine].sort((a,b)=>n(b.montant)-n(a.montant));
+  const snaps=Object.keys(data.snapshots||{}).sort(); const netSeries=snaps.map(k=>data.snapshots[k]);
   const acts=data.actionsPerso||[];
   const updAct=(id,p)=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).map(a=>a.id===id?{...a,...p}:a)}));
   const delAct=id=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).filter(a=>a.id!==id)}));
@@ -539,6 +540,14 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj}){
         <MiniBars items={[{label:"Revenus",value:c.revT,color:BLUE},{label:"Dépenses",value:c.depT,color:"#ef4444"},{label:"Cashflow net",value:c.cashflow,color:"#0ea5e9"}]}/>
         {spark.length>1&&<div className="mt-4 flex items-center gap-3 text-xs text-ink-500"><span>Tendance</span><Sparkline points={spark}/></div>}
         <div className="grid grid-cols-2 gap-3 mt-4"><Mini label="Revenu actif" v={fmtE(c.revA)}/><Mini label="Revenu passif" v={fmtE(c.revP)}/></div>
+      </Card>
+    </div>
+    <div className="grid md:grid-cols-2 gap-5">
+      <Card title="Patrimoine net dans le temps" sub="Un instantané est enregistré chaque mois">
+        {snaps.length>1? <LineChart labels={snaps.map(moisCourt)} series={[{name:"Net",color:BLUE,points:netSeries,fill:true}]} height={200}/> : <div className="text-sm text-ink-400 py-10 text-center">La courbe se construit au fil des mois d'utilisation.</div>}
+      </Card>
+      <Card title="Cashflow mensuel" sub="Alimenté par tes saisies de l'onglet Cashflow">
+        {hist.length>1? <LineChart labels={hist.map(h=>moisCourt(h.ym))} series={[{name:"Cashflow",color:"#0ea5e9",points:hist.map(h=>h.cf),fill:true}]} height={200}/> : <div className="text-sm text-ink-400 py-10 text-center">Saisis plusieurs mois pour voir la tendance.</div>}
       </Card>
     </div>
     <Card title="Mes avoirs" sub="Chaque actif et où il se trouve" right={<button onClick={()=>go("patrimoine")} className="text-xs text-brand-700 hover:underline cursor-pointer">Gérer</button>}>
@@ -823,6 +832,7 @@ function Bourse({data,setData}){
   const dejaB=new Set((data.bourse||[]).map(x=>(x.nom||"").toLowerCase()));
   const tot=lignes.reduce((s,x)=>{s.investi+=n(x.investi);s.valeur+=n(x.valeur);s.div+=n(x.dividendes);return s;},{investi:0,valeur:0,div:0});
   const pv=tot.valeur-tot.investi, perf=tot.investi>0?pv/tot.investi:0, rdtDiv=tot.valeur>0?tot.div/tot.valeur:0;
+  const parType=(()=>{const m={}; lignes.forEach(x=>{m[x.type]=(m[x.type]||0)+n(x.valeur);}); return Object.keys(m).filter(k=>m[k]>0).map((k,i)=>({label:k,value:m[k],color:colorFor(k,i)}));})();
   const tips=[];
   if(lignes.length&&lignes.length<3) tips.push({tone:"info",titre:"Diversification",txt:"Tu as "+lignes.length+" ligne(s). Diversifier (ETF large, secteurs, zones) réduit le risque."});
   const dom=lignes.slice().sort((a,b)=>n(b.valeur)-n(a.valeur))[0];
@@ -836,6 +846,7 @@ function Bourse({data,setData}){
       <KPI label="Plus-value latente" value={fmtE(pv)} tone={pv>=0?"blue":"red"}/>
       <KPI label="Dividendes" value={fmtE(tot.div)+" / an"} tone="blue"/>
     </div>
+    {parType.length>0&&<Card title="Répartition du portefeuille" sub="Par type de placement"><Donut data={parType}/></Card>}
     <AideRemplir sub="Clique sur un type pour ajouter une ligne, puis renomme-la et renseigne les montants." groups={[{options:SUGG_BOURSE.map(([label,type])=>({label,has:dejaB.has(label.toLowerCase()),add:()=>addNamed(label,type)}))}]}/>
     <Card title="Mon portefeuille" sub="Pour chaque ligne : montant investi, valeur actuelle, dividendes annuels. Performance et rendement calculés." right={<AddBtn onClick={add}>Ajouter</AddBtn>}>
       {lignes.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Ajoute ta première ligne (action, ETF, crypto...).</div>}
@@ -929,6 +940,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
         {data.dettes.length===0&&<div className="text-sm text-ink-400 py-2">Aucun crédit. Ajoute en un si tu as un emprunt.</div>}
       </div>
       <Total label="Total mensualités" v={c.mensuCredits}/></Card>
+    {groupes.length>0&&<Card title="Où va ton argent" sub="Répartition de tes dépenses par poste"><Donut data={groupes.map((g,i)=>({label:g.nom,value:g.total,color:colorFor(g.nom,i)}))}/></Card>}
     <Card title="Où optimiser" sub="Tes dépenses regroupées par poste. Concentre tes efforts sur les barres rouges.">
       <div className="grid md:grid-cols-3 gap-4 mb-5">
         <div className="rounded-2xl p-4 bg-ink-100/70"><div className="text-xs text-ink-500">Taux d'épargne</div><div className={"font-heading text-2xl font-bold "+verdict.c}>{fmtP(c.tauxEpargne)}</div><div className="text-xs text-ink-500 mt-0.5">{verdict.t}. {verdict.d}</div></div>

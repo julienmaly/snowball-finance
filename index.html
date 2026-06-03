@@ -350,7 +350,7 @@ function App(){
     </nav>
     <main className="max-w-6xl mx-auto px-4 py-6">
       {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab} ghReady={ghReady} ghMaj={gh.maj}/>}
-      {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc}/>}
+      {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc} go={setTab}/>}
       {tab==="immobilier"&&<Immobilier data={data} setData={setData}/>}
       {tab==="bourse"&&<Bourse data={data} setData={setData}/>}
       {tab==="cashflow"&&<Cashflow data={data} setData={setData} mc={mc} setMc={setMc} moisActif={moisActif} c={c}/>}
@@ -556,7 +556,7 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj}){
 }
 
 /* Patrimoine */
-function Patrimoine({data,setData,c,alloc}){
+function Patrimoine({data,setData,c,alloc,go}){
   const [open,setOpen]=useState({});
   const updA=(id,p)=>setData(d=>({...d,patrimoine:d.patrimoine.map(a=>a.id===id?{...a,...p}:a)}));
   const delA=id=>setData(d=>({...d,patrimoine:d.patrimoine.filter(a=>a.id!==id)}));
@@ -581,7 +581,13 @@ function Patrimoine({data,setData,c,alloc}){
       <KPI label="Patrimoine net" value={fmtE(c.net)} tone="blue"/>
       <KPI label="Plus-value latente" value={fmtE(c.pvLatente)} tone={c.pvLatente>=0?"blue":"red"}/></div>
     <Card title="Allocation"><Donut data={alloc}/></Card>
-    <AideRemplir sub="Clique sur ce que tu possèdes pour l'ajouter à ta liste, puis renseigne les montants. (La bourse et l'immobilier ont leurs propres onglets.)" groups={[{options:SUGG_PATRI.map(([label,classe])=>({label,has:dejaP.has(label.toLowerCase()),add:()=>addAsset(label,classe)}))}]}/>
+    <AideRemplir sub="Clique sur ce que tu possèdes pour l'ajouter, puis renseigne les montants. L'immobilier et la bourse se remplissent dans leurs onglets (clique pour y aller)." groups={[
+      {titre:"Comptes et placements financiers", options:SUGG_PATRI.map(([label,classe])=>({label,has:dejaP.has(label.toLowerCase()),add:()=>addAsset(label,classe)}))},
+      {titre:"Aussi à renseigner, dans leurs onglets", options:[
+        {label:"Immobilier (résidence, locatif…)", has:(data.biens||[]).length>0, add:()=>go("immobilier")},
+        {label:"Bourse, placements, crypto", has:(data.bourse||[]).length>0, add:()=>go("bourse")},
+      ]}
+    ]}/>
     <Card title="Mes actifs" sub="Écris simplement ce que tu as et ce que ça vaut aujourd'hui. Clique sur la flèche pour les détails (facultatif)." right={<AddBtn onClick={addA}>Ajouter</AddBtn>}>
       <div className="space-y-2">
         {data.patrimoine.map(a=>{const pv=n(a.prixRevient)>0?(n(a.montant)-n(a.prixRevient)):null; const det=detteFor(a.id); const o=open[a.id];return(
@@ -648,6 +654,7 @@ function Immobilier({data,setData}){
   const upd=(id,p)=>setData(d=>({...d,biens:(d.biens||[]).map(b=>b.id===id?{...b,...p}:b)}));
   const del=id=>setData(d=>({...d,biens:(d.biens||[]).filter(b=>b.id!==id)}));
   const add=()=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:mode,nom:"Nouveau bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
+  const addUsage=u=>{ setMode(u); setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Nouvelle opération":"Nouveau bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]})); };
   const mc=data.mois[data.moisActif]||{depenses:[]};
   const logementMois=sum(mc.depenses.filter(p=>groupeOf(p.nom)==="Logement"),x=>x.montant);
 
@@ -680,6 +687,11 @@ function Immobilier({data,setData}){
       {kpis.map((k,i)=><KPI key={i} label={k[0]} value={k[1]} icon={k[2]} tone={k[3]}/>)}
     </div>
 
+    <AideRemplir sub="Clique sur le type de bien à ajouter. Tu rempliras ensuite prix d'achat, frais, travaux, loyers, crédit…" groups={[{options:[
+      {label:"Résidence principale", has:false, add:()=>addUsage("RP")},
+      {label:"Bien locatif", has:false, add:()=>addUsage("Locatif")},
+      {label:"Opération achat / revente", has:false, add:()=>addUsage("MDB")},
+    ]}]}/>
     <Card title={mode==="RP"?"Ma résidence principale":mode==="Locatif"?"Mes biens locatifs":"Mes opérations d'achat / revente"}
       sub={mode==="RP"?"Le logement où tu vis. On suit sa valeur, pas un rendement.":mode==="Locatif"?"Biens loués. Rendement, cashflow et fiscalité.":"Achat, rénovation, revente. On pilote la marge de l'opération."}
       right={<AddBtn onClick={add}>Ajouter</AddBtn>}>
@@ -857,7 +869,8 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
         <span className="text-ink-500">Cashflow <b className="text-sky-600">{fmtE(c.cashflow)}</b></span></div></div></Card>
     <AideRemplir sub="Clique pour ajouter les postes courants de ton budget, puis renseigne les montants." groups={[
       {titre:"Revenus courants", options:SUGG_REV.map(([label,type])=>({label,has:dejaR.has(label.toLowerCase()),add:()=>addRevNamed(label,type)}))},
-      {titre:"Dépenses courantes", options:SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDepNamed(label)}))}
+      {titre:"Dépenses courantes", options:SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDepNamed(label)}))},
+      {titre:"Crédits (mensualité + capital restant)", options:[{label:"Ajouter un crédit / prêt", has:false, add:addC}]}
     ]}/>
     <div className="grid md:grid-cols-2 gap-5 items-start">
       <Card title="Revenus" right={<AddBtn onClick={()=>setMc("revenus",[...mc.revenus,{id:uid(),nom:"Nouveau revenu",montant:0,type:"passif"}])}>Ajouter</AddBtn>}>

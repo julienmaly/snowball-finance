@@ -465,19 +465,42 @@ function KPI({label,value,sub,icon,tone="ink"}){
 /* insights */
 function insights(c,data){
   const out=[]; const add=(tone,titre,txt)=>out.push({tone,titre,txt});
-  if(c.pctObj>=0.9&&c.pctObj<1) add("good","Tu y es presque","Plus que "+fmtE(c.reste)+" pour atteindre ton objectif. Un trimestre de cashflow peut suffire.");
-  if(c.pctObj>=1) add("good","Objectif atteint","Ton patrimoine net dépasse ton objectif. Fixe le prochain cap dans Réglages.");
-  if(c.ratioFI>=1) add("good","Indépendance financière","Tes revenus passifs couvrent 100% de ton train de vie. Tu es libre financièrement.");
-  else if(c.depT>0) add("info","Vers la liberté financière","Tes revenus passifs couvrent "+fmtP(c.ratioFI)+" de ton train de vie. Il te manque "+fmtE(c.depT-c.revP)+" par mois de passif pour être libre.");
-  const exces=c.cash-data.params.cibleFondsMois*c.depT;
-  if(c.depT>0&&c.fondsMois>data.params.cibleFondsMois+3) add("info","Du cash dort","Tu as "+fmtM(c.fondsMois)+" de réserve (cible "+data.params.cibleFondsMois+"). Environ "+fmtE(exces)+" pourraient être investis pour accélérer la boule de neige.");
-  if(c.depT>0&&c.fondsMois<data.params.cibleFondsMois) add("warn","Réserve à renforcer","Ton fonds d'urgence ("+fmtM(c.fondsMois)+") est sous ta cible de "+data.params.cibleFondsMois+" mois.");
-  const dCher=(data.dettes||[]).filter(d=>n(d.taux)>=0.07).sort((a,b)=>b.taux-a.taux)[0];
-  if(dCher) add("warn","Dette coûteuse","« "+dCher.nom+" » coûte "+fmtP(dCher.taux)+" par an. La rembourser équivaut à un rendement garanti supérieur à la plupart des placements.");
-  if(c.revT>0&&c.tauxEpargne>=0.5) add("good","Excellent taux d'épargne","Tu épargnes "+fmtP(c.tauxEpargne)+" de tes revenus, soit "+fmtE(c.cashflow*12)+" par an à réinvestir.");
-  else if(c.revT>0&&c.tauxEpargne<0.2) add("warn","Taux d'épargne faible","Tu n'épargnes que "+fmtP(c.tauxEpargne)+". Vise au moins 20% en revoyant tes plus grosses dépenses.");
-  if(c.pvLatente>0) add("info","Plus-value latente","Tu portes "+fmtE(c.pvLatente)+" de plus-value latente sur tes actifs. Elle se concrétisera à la revente.");
-  if(!out.length) add("info","Commence à remplir","Renseigne ton patrimoine et ton cashflow pour obtenir des recommandations personnalisées.");
+  const warns=[], infos=[], goods=[];
+  const P=data&&data.params?data.params:{};
+  const cibleFonds=n(P.cibleFondsMois)||6;
+  const retraitFI=n(P.retraitFI)||0.04;
+  const depT=n(c.depT), revT=n(c.revT), cashflow=n(c.cashflow);
+  const dettes=(data&&Array.isArray(data.dettes))?data.dettes:[];
+  const bourse=(data&&Array.isArray(data.bourse))?data.bourse:[];
+  const patVide=(n(c.net)===0&&n(c.brut)===0&&n(c.dispo)===0), cfVide=(revT===0&&depT===0);
+  if(patVide&&cfVide){ add("info","Commence par remplir ton patrimoine","Ajoute tes comptes, placements, biens et crédits pour que Snowball calcule ton disponible, ton cashflow et ton chemin vers l'indépendance financière."); return out; }
+  if(cashflow<0) warns.push({tone:"warn",titre:"Cashflow négatif, priorité absolue",txt:"Tu dépenses "+fmtE(Math.abs(cashflow))+" de plus que tu ne gagnes chaque mois, soit "+fmtE(Math.abs(cashflow)*12)+" par an. Coupe d'abord les dépenses variables (abonnements, sorties, achats) avant tout projet d'épargne."});
+  if(depT>0&&n(c.fondsMois)<cibleFonds) warns.push({tone:"warn",titre:"Fonds d'urgence à constituer",txt:"Tu couvres "+fmtM(n(c.fondsMois))+" de dépenses, vise "+fmtM(cibleFonds)+" soit "+fmtE(cibleFonds*depT)+" de liquidités (3 à 6 mois idéalement). C'est la priorité avant d'investir."});
+  let pire=null; for(const d of dettes){ if(d&&d.type==="credit"&&!d.bienLie&&n(d.taux)>=0.05){ if(!pire||n(d.taux)>n(pire.taux)) pire=d; } }
+  if(pire) warns.push({tone:"warn",titre:"Attaque ta dette la plus chère",txt:"Le crédit "+(pire.nom||"conso")+" coûte "+fmtP(n(pire.taux))+" par an sur "+fmtE(n(pire.montant))+". Le rembourser en priorité (méthode avalanche) te rapporte un rendement garanti de "+fmtP(n(pire.taux))+", bien plus sûr qu'un placement. Un crédit immo à taux bas, lui, garde son effet de levier."});
+  if(revT>0){ const te=n(c.tauxEpargne), annu=fmtE(cashflow*12);
+    if(te<0.10&&cashflow>=0) warns.push({tone:"warn",titre:"Taux d'épargne très faible",txt:"Tu épargnes "+fmtP(te)+" de tes revenus ("+annu+" par an). Vise au moins 20% : chaque point gagné rapproche ta date d'indépendance financière."});
+    else if(te>=0.10&&te<0.20) infos.push({tone:"info",titre:"Pousse ton épargne vers 20%",txt:"Tu épargnes "+fmtP(te)+" ("+annu+" par an), juste sous le seuil sain de 20%. Plus tu montes ce taux, plus tôt tu atteins la liberté financière."});
+    else if(te>=0.20&&te<0.50) goods.push({tone:"good",titre:"Bon taux d'épargne",txt:"Tu épargnes "+fmtP(te)+" de tes revenus, soit "+annu+" par an. Tu es au-dessus du seuil sain de 20%, continue ainsi."});
+    else if(te>=0.50) goods.push({tone:"good",titre:"Taux d'épargne exceptionnel",txt:"Tu épargnes "+fmtP(te)+" ("+annu+" par an), un rythme digne du mouvement FIRE qui peut t'amener à l'indépendance en quelques années."});
+  }
+  if(n(c.ratioFI)>=1) goods.push({tone:"good",titre:"Indépendance financière atteinte",txt:"Tes revenus passifs ("+fmtE(n(c.revP))+" par mois) couvrent l'intégralité de ton train de vie. Tu es financièrement libre, tes choix ne dépendent plus de ton salaire."});
+  else if(depT>0) infos.push({tone:"info",titre:"Bâtis tes revenus passifs",txt:"Tes revenus passifs couvrent "+fmtP(n(c.ratioFI))+" de ton train de vie. Pour viser l'indépendance (retrait à "+fmtP(retraitFI)+"), il te faut environ "+fmtE(n(c.capitalFI))+" de capital, à nourrir via dividendes et locatif."});
+  if(n(c.objEUR)>0){ const po=n(c.pctObjDispo);
+    if(po>=1) goods.push({tone:"good",titre:"Objectif de disponible atteint",txt:"Ton disponible ("+fmtE(n(c.dispo))+") dépasse ton objectif de "+fmtE(n(c.objEUR))+". Félicitations, tu peux relever la barre ou sécuriser ce capital."});
+    else if(po>=0.9) goods.push({tone:"good",titre:"Objectif de disponible presque atteint",txt:"Tu es à "+fmtP(po)+" de ton objectif, il ne te manque que "+fmtE(n(c.resteDispo))+" de disponible. La ligne d'arrivée est proche."});
+  }
+  if(depT>0&&n(c.fondsMois)>=cibleFonds&&n(c.fondsMois)>cibleFonds+3){ const surplus=n(c.cash)-cibleFonds*depT;
+    if(surplus>0) infos.push({tone:"info",titre:"Trop de cash qui dort",txt:"Au-delà de ton fonds d'urgence, "+fmtE(surplus)+" dorment et perdent de la valeur avec l'inflation. Investis cet excédent pour lancer l'effet boule de neige des intérêts composés."}); }
+  if(cashflow>0&&depT>0&&n(c.fondsMois)>=cibleFonds&&n(c.bourseValeur)<n(c.cash)) infos.push({tone:"info",titre:"Automatise ton investissement",txt:"Ton fonds d'urgence est prêt et il te reste "+fmtE(cashflow)+" par mois. Mets en place un virement automatique vers un ETF monde (DCA) pour investir sans y penser."});
+  if(n(c.brut)>0&&n(c.immoValeur)/n(c.brut)>0.70) infos.push({tone:"info",titre:"Patrimoine concentré sur l'immobilier",txt:"L'immobilier pèse "+fmtP(n(c.immoValeur)/n(c.brut))+" de ton patrimoine brut. Diversifier vers la bourse (ETF monde) réduit ton risque et améliore ta liquidité."});
+  let totBourse=0; for(const b of bourse){ totBourse+=n(b.valeur); }
+  if(totBourse>0){ let topB=null; for(const b of bourse){ if(!topB||n(b.valeur)>n(topB.valeur)) topB=b; }
+    if(topB&&n(topB.valeur)/totBourse>0.5) infos.push({tone:"info",titre:"Ligne bourse trop dominante",txt:(topB.nom||"Une ligne")+" représente "+fmtP(n(topB.valeur)/totBourse)+" de ton portefeuille. Concentrer autant sur un seul actif est risqué, équilibre vers un fonds diversifié."}); }
+  if(n(c.pvLatente)>0&&n(c.brut)>0&&n(c.pvLatente)>0.05*n(c.brut)) infos.push({tone:"info",titre:"Plus-value latente non réalisée",txt:"Tu portes "+fmtE(n(c.pvLatente))+" de plus-value latente, un gain encore sur le papier tant que tu ne vends pas. Compte avec son éventuelle fiscalité avant de la considérer acquise."});
+  const all=warns.concat(infos).concat(goods).slice(0,6);
+  for(const it of all) add(it.tone,it.titre,it.txt);
+  if(out.length===0) add("info","Continue à enrichir ton suivi","Aucune alerte majeure pour l'instant. Complète tes données et fixe un objectif de disponible pour des recommandations plus précises.");
   return out;
 }
 const toneStyle={ good:{b:"border-brand-200 bg-brand-50",d:"bg-brand-500",t:"text-brand-800"},
@@ -1438,18 +1461,20 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
           <IconBtn name="x" onClick={()=>del("revenus",r.id)} title="Supprimer"/></div>))}</div>
         <Total label="Total revenus" v={c.revT}/></Card>
       <Card title="Dépenses du mois" sub="Fixe ou variable = récurrent (reporté chaque mois). Ponctuelle = dépense exceptionnelle, comptée ce mois-ci seulement et non reportée. Le % indique le poids dans tes revenus." right={<AjouterMenu options={SUGG_DEP.map(([label,cat])=>({label,pick:()=>addDepNamed(label,cat)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0,cat:"variable"}])}/>}>
-        {["fixe","variable","ponctuelle"].map(cat=>{const lignes=mc.depenses.filter(p=>(p.cat||"variable")===cat); if(lignes.length===0)return null;
+        {["fixe","variable","ponctuelle"].map(cat=>{const lignes=mc.depenses.filter(p=>(p.cat||"variable")===cat);
           const stot=sum(lignes,x=>x.montant); const lbl=cat==="fixe"?"Coûts fixes":cat==="variable"?"Coûts variables":"Dépenses ponctuelles (ce mois)";
           return (<div key={cat} className="mb-3">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-ink-400 px-1 mb-1"><span>{lbl}</span><span>{fmtE(stot)}{c.revT>0?" · "+Math.round(stot/c.revT*100)+"%":""}</span></div>
+            <div className="flex items-center justify-between gap-2 px-1 mb-1">
+              <span className="text-[11px] uppercase tracking-wide text-ink-400">{lbl}{lignes.length>0?" · "+fmtE(stot)+(c.revT>0?" · "+Math.round(stot/c.revT*100)+"%":""):""}</span>
+              <button onClick={()=>addDepNamed("",cat)} className="text-xs font-medium text-brand-700 hover:text-brand-800 hover:bg-brand-50 rounded-lg px-2 py-0.5 cursor-pointer">+ ajouter</button></div>
             <div className="space-y-2">{lignes.map(p=>(<div key={p.id} className="flex items-center gap-2">
               <select value={p.cat||"variable"} onChange={e=>upd("depenses",p.id,{cat:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="fixe">Fixe</option><option value="variable">Variable</option><option value="ponctuelle">Ponctuelle</option></select>
               <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
               {c.revT>0&&n(p.montant)>0&&<span className="text-[11px] text-ink-400 shrink-0 w-10 text-right" title="part de tes revenus">{Math.round(n(p.montant)/c.revT*100)}%</span>}
               <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>
               <IconBtn name="x" onClick={()=>del("depenses",p.id)} title="Supprimer"/></div>))}</div>
+            {lignes.length===0&&<div className="text-xs text-ink-300 px-1 pb-1">{cat==="ponctuelle"?"Une grosse dépense imprévue ce mois (réparation, gros achat) : elle compte ce mois-ci et ne sera pas reportée.":"Rien pour l'instant."}</div>}
           </div>);})}
-        {mc.depenses.length===0&&<div className="text-sm text-ink-400 py-2">Ajoute tes dépenses (le menu propose des catégories fixe / variable).</div>}
         <div className="flex flex-wrap items-center justify-between gap-2 mt-1 pt-3 border-t border-ink-200 text-sm">
           <span className="font-heading font-semibold text-ink-700">Total {fmtE(c.depCourante)}{deltaDep!=null&&<span className={"ml-1 text-xs font-normal "+(deltaDep>0?"text-red-500":"text-brand-600")}>({deltaDep>0?"+":""}{fmtP(deltaDep)} vs {moisCourt(moisPrec)})</span>}</span>
           {c.revT>0&&<span className="text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5">{Math.round((1-c.depCourante/c.revT)*100)}% restant</span>}

@@ -171,6 +171,8 @@ const GROUPES=[
   {nom:"Loisirs & extras",pct:0.12,k:["sortie","loisir","habit","vetement","vêtement","voyage","vacance","restaurant","resto","abonnement","animaux","cigarette","cadeau","charite","charité","sport"]},
 ];
 function groupeOf(nom){const l=(nom||"").toLowerCase(); for(const g of GROUPES){ if(g.k.some(k=>l.includes(k))) return g.nom;} return "Autres";}
+// Report d'un mois sur l'autre : on ne garde que le salaire dans les revenus (le reste, ponctuel, est remis a zero chaque mois).
+function carryRev(revs){ const r=revs||[]; const sal=r.filter(x=>(x.nom||"").toLowerCase().includes("salaire")); return sal.length?sal:r.filter(x=>x.type==="actif"); }
 
 /* projection multi-années partagée */
 function projeter(net, apportAnnuel, rdt, objEUR, ans){
@@ -317,7 +319,7 @@ function App(){
   useEffect(()=>{ setData(d=>{ const ym=nowYM(); if(d.mois[ym]) return {...d,moisActif:ym};
     const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
     const cl=a=>(a||[]).map(x=>({...x,id:uid()}));
-    return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(src.revenus),depenses:cl(src.depenses)}}}; }); },[]);
+    return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(src.depenses)}}}; }); },[]);
 
   /* taux EUR/USD auto */
   const fetchFX=()=>fetch('https://open.er-api.com/v6/latest/EUR').then(r=>r.json()).then(j=>{
@@ -1392,7 +1394,7 @@ function LocatifTool({data,setData}){
 /* Cashflow */
 function Cashflow({data,setData,mc,setMc,moisActif,c}){
   const changeMois=ym=>setData(d=>{ if(!d.mois[ym]){ const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
-      const cl=a=>a.map(x=>({...x,id:uid()})); return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(src.revenus),depenses:cl(src.depenses)}}}; }
+      const cl=a=>a.map(x=>({...x,id:uid()})); return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(src.depenses)}}}; }
     return {...d,moisActif:ym}; });
   const upd=(k,id,patch)=>setMc(k,mc[k].map(x=>x.id===id?{...x,...patch}:x));
   const del=(k,id)=>setMc(k,mc[k].filter(x=>x.id!==id));

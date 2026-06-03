@@ -508,66 +508,135 @@ function Patrimoine({data,setData,c,alloc}){
   </div>);
 }
 
-/* Immobilier */
+/* Immobilier (3 modes : RP / Locatif / MDB) */
+const IMMO_MODES=[["RP","Résidence principale"],["Locatif","Locatif"],["MDB","Achat / revente"]];
+function coutRevient(b){ return n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux); }
+function Acquisition({b,upd}){
+  return (<div className="grid sm:grid-cols-3 gap-3">
+    <Field label="Prix d'achat (net vendeur)"><Money value={b.prixAchat} onChange={v=>upd(b.id,{prixAchat:v})}/></Field>
+    <Field label="Frais d'acquisition (notaire, agence)"><Money value={b.fraisAcq} onChange={v=>upd(b.id,{fraisAcq:v})}/></Field>
+    <Field label="Travaux (cumul, à mettre à jour)"><Money value={b.travaux} onChange={v=>upd(b.id,{travaux:v})}/></Field>
+  </div>);
+}
 function Immobilier({data,setData}){
+  const [mode,setMode]=useState("RP");
   const [open,setOpen]=useState({});
   const biens=data.biens||[];
+  const list=biens.filter(b=>(b.usage||"RP")===mode);
   const upd=(id,p)=>setData(d=>({...d,biens:(d.biens||[]).map(b=>b.id===id?{...b,...p}:b)}));
   const del=id=>setData(d=>({...d,biens:(d.biens||[]).filter(b=>b.id!==id)}));
-  const add=()=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),nom:"Nouveau bien",type:"Locatif",valeur:0,cout:0,loyer:0,charges:0,taxe:0,capital:0,mensualite:0,taux:0.03}]}));
-  const calc=b=>{const pv=n(b.valeur)-n(b.cout), equity=n(b.valeur)-n(b.capital);
-    const cfMois=n(b.loyer)-n(b.charges)-n(b.taxe)/12-n(b.mensualite);
-    const rdtBrut=n(b.cout)>0?n(b.loyer)*12/n(b.cout):0;
-    const rdtNet=n(b.cout)>0?(n(b.loyer)*12-n(b.charges)*12-n(b.taxe))/n(b.cout):0;
-    return {pv,equity,cfMois,rdtBrut,rdtNet};};
-  const tot=biens.reduce((s,b)=>{const cc=calc(b); s.valeur+=n(b.valeur); s.capital+=n(b.capital); s.equity+=cc.equity; s.cf+=cc.cfMois; s.pv+=cc.pv; return s;},{valeur:0,capital:0,equity:0,cf:0,pv:0});
-  const TYPES=["Locatif","Résidence principale","SCI","Secondaire"];
+  const add=()=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:mode,nom:"Nouveau bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
+  const mc=data.mois[data.moisActif]||{depenses:[]};
+  const logementMois=sum(mc.depenses.filter(p=>groupeOf(p.nom)==="Logement"),x=>x.montant);
+
+  const calcLoc=b=>{const occ=(12-Math.min(12,n(b.vacance)))/12, cr=coutRevient(b), loyerAn=n(b.loyer)*12*occ;
+    return {cr, occ, pv:n(b.valeur)-cr, equity:n(b.valeur)-n(b.capital),
+      rdtBrut:cr>0?loyerAn/cr:0, rdtNet:cr>0?(loyerAn-n(b.charges)*12-n(b.taxe))/cr:0,
+      cfMois:n(b.loyer)*occ-n(b.charges)-n(b.taxe)/12-n(b.mensualite)};};
+  const calcMdb=b=>{const portage=n(b.portageMois)*n(b.dureeMois), coutTot=n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux)+portage+n(b.fraisRevente);
+    const margeBrute=n(b.prixRevente)-n(b.prixAchat)-n(b.fraisAcq)-n(b.travaux), margeNet=n(b.prixRevente)-coutTot, is=Math.max(0,margeNet*n(b.tauxIS)), net=margeNet-is;
+    return {portage,coutTot,margeBrute,margeNet,is,net, roi:coutTot>0?net/coutTot:0, roiAn:n(b.dureeMois)>0?(coutTot>0?net/coutTot:0)*12/n(b.dureeMois):0};};
+
+  let kpis=[];
+  if(mode==="RP"){ const t=list.reduce((s,b)=>{s.val+=n(b.valeur);s.cr+=coutRevient(b);s.cap+=n(b.capital);return s;},{val:0,cr:0,cap:0});
+    kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Coût de revient",fmtE(t.cr),null,"ink"],["Plus-value latente",fmtE(t.val-t.cr),null,(t.val-t.cr)>=0?"blue":"red"],["Valeur nette",fmtE(t.val-t.cap),null,"blue"]]; }
+  else if(mode==="Locatif"){ const t=list.reduce((s,b)=>{const c=calcLoc(b);s.val+=n(b.valeur);s.cf+=c.cfMois;s.pv+=c.pv;s.loyerAn+=n(b.loyer)*12*c.occ;s.net+=(n(b.loyer)*12*c.occ-n(b.charges)*12-n(b.taxe));s.cr+=c.cr;return s;},{val:0,cf:0,pv:0,loyerAn:0,net:0,cr:0});
+    kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Cashflow locatif",fmtE(t.cf)+" / mois",null,t.cf>=0?"blue":"red"],["Rendement net moyen",fmtP(t.cr>0?t.net/t.cr:0),null,"blue"],["Plus-value latente",fmtE(t.pv),null,t.pv>=0?"blue":"red"]]; }
+  else { const t=list.reduce((s,b)=>{const c=calcMdb(b);s.eng+=n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux);s.rev+=n(b.prixRevente);s.net+=c.net;return s;},{eng:0,rev:0,net:0});
+    kpis=[["Capital engagé",fmtE(t.eng),null,"ink"],["Revente estimée",fmtE(t.rev),null,"blue"],["Marge nette estimée",fmtE(t.net),null,t.net>=0?"blue":"red"],["Opérations",list.length,null,"ink"]]; }
+
   return (<div className="space-y-5">
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <KPI label="Valeur des biens" value={fmtE(tot.valeur)} icon="home"/>
-      <KPI label="Valeur nette" value={fmtE(tot.equity)} tone="blue"/>
-      <KPI label="Cashflow locatif" value={fmtE(tot.cf)+" / mois"} tone={tot.cf>=0?"blue":"red"}/>
-      <KPI label="Plus-value latente" value={fmtE(tot.pv)} tone={tot.pv>=0?"blue":"red"}/>
+    <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit">
+      {IMMO_MODES.map(([k,l])=><button key={k} onClick={()=>setMode(k)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition "+(mode===k?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}>{l}</button>)}
     </div>
-    <Card title="Mes biens immobiliers" sub="Pour chaque bien : valeur, coût, loyers, charges et crédit. Le rendement, le cashflow et la plus-value se calculent." right={<AddBtn onClick={add}>Ajouter un bien</AddBtn>}>
-      {biens.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Ajoute ton premier bien immobilier.</div>}
-      <div className="space-y-3">{biens.map(b=>{const cc=calc(b); const o=open[b.id]; return(
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {kpis.map((k,i)=><KPI key={i} label={k[0]} value={k[1]} icon={k[2]} tone={k[3]}/>)}
+    </div>
+
+    <Card title={mode==="RP"?"Ma résidence principale":mode==="Locatif"?"Mes biens locatifs":"Mes opérations d'achat / revente"}
+      sub={mode==="RP"?"Le logement où tu vis. On suit sa valeur, pas un rendement.":mode==="Locatif"?"Biens loués. Rendement, cashflow et fiscalité.":"Achat, rénovation, revente. On pilote la marge de l'opération."}
+      right={<AddBtn onClick={add}>Ajouter</AddBtn>}>
+      {list.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Aucun bien ici. Ajoute le tien.</div>}
+      <div className="space-y-3">{list.map(b=>{const o=open[b.id]; return(
         <div key={b.id} className="rounded-2xl border border-ink-100">
           <div className="flex items-center gap-2 p-2">
             <button onClick={()=>setOpen(s=>({...s,[b.id]:!o}))} className="text-ink-300 hover:text-brand-600 w-7 h-7 rounded-lg hover:bg-ink-100 cursor-pointer shrink-0">{o?"▾":"▸"}</button>
-            <div className="flex-1 min-w-[120px]"><TextInput value={b.nom} onChange={v=>upd(b.id,{nom:v})} placeholder="Ex : appartement Lyon"/></div>
-            <select value={b.type} onChange={e=>upd(b.id,{type:e.target.value})} className="w-44 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{TYPES.map(t=><option key={t}>{t}</option>)}</select>
-            <Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})} className="w-32"/>
+            <div className="flex-1 min-w-[120px]"><TextInput value={b.nom} onChange={v=>upd(b.id,{nom:v})} placeholder={mode==="MDB"?"Ex : maison à rénover":"Ex : appartement Lyon"}/></div>
+            <Money value={mode==="MDB"?b.prixRevente:b.valeur} onChange={v=>upd(b.id,mode==="MDB"?{prixRevente:v}:{valeur:v})} className="w-32"/>
             <IconBtn name="x" onClick={()=>del(b.id)} title="Supprimer"/>
           </div>
           {o&&<div className="px-3 pb-3 pt-2 border-t border-ink-100 space-y-4">
-            <div className="grid sm:grid-cols-3 gap-3">
-              <Field label="Coût de revient (achat + frais + travaux)"><Money value={b.cout} onChange={v=>upd(b.id,{cout:v})}/></Field>
-              <Field label="Loyer perçu (mensuel)"><Money value={b.loyer} onChange={v=>upd(b.id,{loyer:v})}/></Field>
-              <Field label="Charges (mensuel : copro, gestion, entretien)"><Money value={b.charges} onChange={v=>upd(b.id,{charges:v})}/></Field>
-              <Field label="Taxe foncière (annuelle)"><Money value={b.taxe} onChange={v=>upd(b.id,{taxe:v})}/></Field>
-              <Field label="Crédit : mensualité"><Money value={b.mensualite} onChange={v=>upd(b.id,{mensualite:v})}/></Field>
-              <Field label="Crédit : capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <Mini label="Cashflow / mois" v={fmtE(cc.cfMois)} tone={cc.cfMois>=0?"brand":"red"}/>
-              <Mini label="Rendement brut" v={fmtP(cc.rdtBrut)}/>
-              <Mini label="Rendement net" v={fmtP(cc.rdtNet)}/>
-              <Mini label="Plus-value latente" v={fmtE(cc.pv)} tone={cc.pv>=0?"brand":"red"}/>
-              <Mini label="Valeur nette" v={fmtE(cc.equity)}/>
-            </div>
+            <Acquisition b={b} upd={upd}/>
+            {mode==="RP"&&<>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <Field label="Valeur actuelle (estimation)"><Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})}/></Field>
+                <Field label="Crédit : capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Mini label="Coût de revient" v={fmtE(coutRevient(b))}/>
+                <Mini label="Plus-value latente" v={fmtE(n(b.valeur)-coutRevient(b))} tone={(n(b.valeur)-coutRevient(b))>=0?"brand":"red"}/>
+                <Mini label="Valeur nette" v={fmtE(n(b.valeur)-n(b.capital))}/>
+                <Mini label="Charges du logement" v={fmtE(logementMois)+" / mois"}/>
+              </div>
+              <p className="text-xs text-ink-400">Les charges récurrentes (électricité, eau, copro, crédit) de ta résidence principale sont suivies dans <b>Cashflow, poste Logement</b> ({fmtE(logementMois)}/mois) et ne sont pas recomptées ici. La plus-value de revente d'une résidence principale est exonérée d'impôt.</p>
+            </>}
+            {mode==="Locatif"&&(()=>{const c=calcLoc(b);return(<>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <Field label="Valeur actuelle (estimation)"><Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})}/></Field>
+                <Field label="Loyer perçu hors charges (mensuel)"><Money value={b.loyer} onChange={v=>upd(b.id,{loyer:v})}/></Field>
+                <Field label="Charges non récupérables (mensuel)"><Money value={b.charges} onChange={v=>upd(b.id,{charges:v})}/></Field>
+                <Field label="Taxe foncière (annuelle)"><Money value={b.taxe} onChange={v=>upd(b.id,{taxe:v})}/></Field>
+                <Field label="Vacance (mois / an)"><Money value={b.vacance} onChange={v=>upd(b.id,{vacance:v})} suffix="m"/></Field>
+                <Field label="Crédit : mensualité"><Money value={b.mensualite} onChange={v=>upd(b.id,{mensualite:v})}/></Field>
+                <Field label="Crédit : capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <Mini label="Cashflow / mois" v={fmtE(c.cfMois)} tone={c.cfMois>=0?"brand":"red"}/>
+                <Mini label="Rendement brut" v={fmtP(c.rdtBrut)}/>
+                <Mini label="Rendement net" v={fmtP(c.rdtNet)}/>
+                <Mini label="Plus-value latente" v={fmtE(c.pv)} tone={c.pv>=0?"brand":"red"}/>
+                <Mini label="Valeur nette" v={fmtE(c.equity)}/>
+              </div>
+            </>);})()}
+            {mode==="MDB"&&(()=>{const c=calcMdb(b);return(<>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <Field label="Prix de revente estimé"><Money value={b.prixRevente} onChange={v=>upd(b.id,{prixRevente:v})}/></Field>
+                <Field label="Frais de portage (mensuel : intérêts, charges)"><Money value={b.portageMois} onChange={v=>upd(b.id,{portageMois:v})}/></Field>
+                <Field label="Durée de portage (mois)"><Money value={b.dureeMois} onChange={v=>upd(b.id,{dureeMois:v})} suffix="m"/></Field>
+                <Field label="Frais de revente (agence, diagnostics)"><Money value={b.fraisRevente} onChange={v=>upd(b.id,{fraisRevente:v})}/></Field>
+                <Field label="Taux d'imposition (IS)"><Pct value={b.tauxIS} onChange={v=>upd(b.id,{tauxIS:v})}/></Field>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <Mini label="Coût de revient total" v={fmtE(c.coutTot)}/>
+                <Mini label="Marge brute" v={fmtE(c.margeBrute)} tone={c.margeBrute>=0?"brand":"red"}/>
+                <Mini label="Marge nette (après IS)" v={fmtE(c.net)} tone={c.net>=0?"brand":"red"}/>
+                <Mini label="Rentabilité" v={fmtP(c.roi)}/>
+                <Mini label="Rentabilité annualisée" v={fmtP(c.roiAn)}/>
+              </div>
+              <p className="text-xs text-ink-400">Coût total = achat + frais + travaux + portage ({fmtE(c.portage)}) + frais de revente. La durée de portage est critique : chaque mois en plus ajoute des frais et réduit la marge.</p>
+            </>);})()}
           </div>}
         </div>);})}</div>
     </Card>
+
     <Card title="En clair">
-      <ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
-        <li><b>Cashflow locatif</b> : loyer moins charges, taxe foncière et mensualité de crédit. Positif = le bien te rapporte chaque mois.</li>
-        <li><b>Rendement brut</b> : loyers d'un an divisés par ce que le bien t'a coûté. <b>Rendement net</b> : pareil, après charges et taxe.</li>
-        <li><b>Plus-value latente</b> : valeur actuelle moins coût de revient (gain à la revente).</li>
-        <li><b>Valeur nette</b> : valeur actuelle moins le crédit restant. C'est ta vraie part du bien.</li>
-      </ul>
-      <p className="text-xs text-ink-400 mt-3">Cet onglet est autonome pour l'instant. Prochaine étape : relier automatiquement ces biens, leurs loyers et leurs crédits au tableau de bord et au cashflow global.</p>
+      {mode==="RP"&&<ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
+        <li>Une résidence principale ne se pilote pas en rendement mais en <b>patrimoine</b> : sa valeur, ce que tu en possèdes vraiment, sa plus-value latente.</li>
+        <li>Achat, frais et travaux sont <b>séparés</b> : les travaux se mettent à jour au fil du temps et serviront de base à la plus-value si un jour tu mets le bien en location.</li>
+        <li>Ses charges du quotidien restent dans le <b>Cashflow</b> (poste Logement), pas ici, pour ne rien compter deux fois.</li>
+      </ul>}
+      {mode==="Locatif"&&<ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
+        <li><b>Rendement brut</b> = loyers d'un an / coût de revient. <b>Net</b> = après charges non récupérables et taxe foncière.</li>
+        <li><b>Cashflow</b> = loyer (ajusté de la vacance) moins charges, taxe et mensualité. Le capital remboursé pèse sur le cashflow mais n'est pas une charge déductible.</li>
+        <li>Ne compte que les <b>charges non récupérables</b> (celles refacturées au locataire sont neutres).</li>
+      </ul>}
+      {mode==="MDB"&&<ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
+        <li>Logique d'<b>opération</b>, pas de patrimoine : on suit la <b>marge</b> sur un achat-rénovation-revente borné dans le temps.</li>
+        <li>Marge nette = revente moins (achat + frais + travaux + portage + frais de revente + impôt).</li>
+        <li>Regarde la <b>rentabilité annualisée</b> : 15% sur 6 mois ne vaut pas 15% sur 24 mois.</li>
+      </ul>}
     </Card>
+    <p className="text-xs text-ink-400 px-1">Module autonome pour l'instant. Prochaine étape : relier valeurs, loyers et crédits au tableau de bord et au cashflow global.</p>
   </div>);
 }
 

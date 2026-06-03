@@ -2,8 +2,14 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Snowball Finance</title>
+<meta name="theme-color" content="#0284c7" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Snowball" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1'/%3E%3C/svg%3E" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -100,7 +106,7 @@ function defaultData(){
     mois:{ [ym]:{ revenus:[ {id:uid(),nom:"Salaire",montant:0,type:"actif"} ],
       depenses:[ {id:uid(),nom:"Loyer",montant:0},{id:uid(),nom:"Alimentation",montant:0},{id:uid(),nom:"Eau",montant:0} ] } },
     suivi:[ {id:uid(),annee:new Date().getFullYear(),brut:0,dettes:0} ],
-    biens:[],
+    biens:[], bourse:[],
     snapshots:{}, actionsPerso:[],
     jalons:[ {id:uid(),intitule:"Fonds d'urgence de 6 mois",categorie:"Sécurité",statut:"À faire"} ],
     projection:{ annee:new Date().getFullYear()+1, rendement:0.08, mensuel:Array.from({length:12},()=>({rev:0,dep:0})) },
@@ -110,7 +116,7 @@ let CAME_FROM_STORAGE=false;
 function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.parse(s);
   if(d&&d.params){ CAME_FROM_STORAGE=true;
     if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
-    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[];
+    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[]; if(!d.bourse)d.bourse=[];
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
     return d; }} }catch(e){} return defaultData(); }
 
@@ -284,13 +290,20 @@ function App(){
   const setMc=(kind,lines)=>setData(d=>({...d,mois:{...d.mois,[moisActif]:{...(d.mois[moisActif]||{revenus:[],depenses:[]}),[kind]:lines}}}));
 
   const c=useMemo(()=>{
-    const brut=sum(data.patrimoine,a=>a.montant), dettesT=sum(data.dettes,x=>x.montant), net=brut-dettesT;
-    const revT=sum(mc.revenus,r=>r.montant), revP=sum(mc.revenus.filter(r=>r.type==="passif"),r=>r.montant), revA=revT-revP;
+    const biens=data.biens||[];
+    const immoBiens=biens.filter(b=>b.usage==="RP"||b.usage==="Locatif");
+    const immoValeur=sum(immoBiens,b=>b.valeur), immoDette=sum(immoBiens,b=>b.capital);
+    const immoCf=sum(biens.filter(b=>b.usage==="Locatif"),b=>{const occ=(12-Math.min(12,n(b.vacance)))/12; return n(b.loyer)*occ-n(b.charges)-n(b.taxe)/12-n(b.mensualite);});
+    const bourse=data.bourse||[]; const bourseValeur=sum(bourse,x=>x.valeur), bourseDiv=sum(bourse,x=>x.dividendes)/12;
+    const financierBrut=sum(data.patrimoine,a=>a.montant)+bourseValeur;
+    const brut=financierBrut+immoValeur, dettesT=sum(data.dettes,x=>x.montant)+immoDette, net=brut-dettesT;
+    const revTman=sum(mc.revenus,r=>r.montant), revPman=sum(mc.revenus.filter(r=>r.type==="passif"),r=>r.montant), revA=revTman-revPman;
+    const immoPos=Math.max(0,immoCf), revP=revPman+immoPos+bourseDiv, revT=revTman+immoPos+bourseDiv;
     const depCourante=sum(mc.depenses,x=>x.montant), mensuCredits=sum(data.dettes,x=>x.mensualite);
     const depT=depCourante+mensuCredits, cash=sum(data.patrimoine.filter(a=>a.classe==="Liquidités"),a=>a.montant);
-    const cashflow=revT-depT, eur=data.params.eurusd||1.08, objEUR=data.params.objectifEUR||1000000;
+    const cashflow=(revTman-depT)+immoCf+bourseDiv, eur=data.params.eurusd||1.08, objEUR=data.params.objectifEUR||1000000;
     const pvLatente=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"), a=>n(a.montant)-n(a.prixRevient));
-    return { brut,dettesT,net,netUSD:net*eur,revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
+    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
       tauxEpargne:revT?cashflow/revT:0, objEUR, pctObj:objEUR?net/objEUR:0, reste:Math.max(0,objEUR-net),
       ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
   },[data,mc]);
@@ -299,7 +312,9 @@ function App(){
     return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.net}}; }); },[c.net]);
 
   const alloc=useMemo(()=>{ const m={}; data.patrimoine.forEach(a=>{m[a.classe]=(m[a.classe]||0)+n(a.montant);});
-    return Object.keys(m).filter(k=>m[k]>0).map((k,i)=>({label:k,value:m[k],color:colorFor(k,i)})); },[data.patrimoine]);
+    const immo=sum((data.biens||[]).filter(b=>b.usage==="RP"||b.usage==="Locatif"),b=>b.valeur); if(immo>0) m["Immobilier"]=(m["Immobilier"]||0)+immo;
+    const bo=sum(data.bourse||[],x=>x.valeur); if(bo>0) m["Bourse"]=(m["Bourse"]||0)+bo;
+    return Object.keys(m).filter(k=>m[k]>0).map((k,i)=>({label:k,value:m[k],color:colorFor(k,i)})); },[data.patrimoine,data.biens,data.bourse]);
   const histCashflow=useMemo(()=> Object.keys(data.mois).sort().map(ym=>{const mm=data.mois[ym];
     return {ym,cf:sum(mm.revenus,r=>r.montant)-sum(mm.depenses,x=>x.montant)};}),[data.mois]);
 
@@ -309,7 +324,7 @@ function App(){
     r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.params){setData(d);flash("Données importées");} else flash("Fichier invalide"); }catch(err){flash("Erreur de lecture");} };
     r.readAsText(f); };
 
-  const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["immobilier","Immobilier","home"],["cashflow","Cashflow","wallet"],
+  const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["immobilier","Immobilier","home"],["bourse","Bourse","trending"],["cashflow","Cashflow","wallet"],
     ["projection","Projection","chart"],["suivi","Suivi","trending"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
 
   return (<div className="min-h-screen">
@@ -335,6 +350,7 @@ function App(){
       {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab}/>}
       {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc}/>}
       {tab==="immobilier"&&<Immobilier data={data} setData={setData}/>}
+      {tab==="bourse"&&<Bourse data={data} setData={setData}/>}
       {tab==="cashflow"&&<Cashflow data={data} setData={setData} mc={mc} setMc={setMc} moisActif={moisActif} c={c}/>}
       {tab==="projection"&&<Projection data={data} setData={setData} c={c}/>}
       {tab==="suivi"&&<Suivi data={data} setData={setData} c={c} hist={histCashflow}/>}
@@ -390,6 +406,12 @@ function insights(c,data){
 const toneStyle={ good:{b:"border-brand-200 bg-brand-50",d:"bg-brand-500",t:"text-brand-800"},
   info:{b:"border-sky-200 bg-sky-50",d:"bg-sky-500",t:"text-sky-800"},
   warn:{b:"border-amber-200 bg-amber-50",d:"bg-amber-500",t:"text-amber-800"} };
+function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length) return null;
+  return (<Card title="Analyse" sub="Remarques générées automatiquement sur cette section">
+    <div className="space-y-2">{items.map((r,i)=>{const s=toneStyle[r.tone||"info"];return(
+      <div key={i} className={"rounded-2xl border p-3 flex gap-3 "+s.b}><span className={"w-2 h-2 rounded-full mt-1.5 shrink-0 "+s.d}/>
+        <div><span className={"font-heading font-semibold text-sm "+s.t}>{r.titre}{r.titre?" : ":""}</span><span className="text-sm text-ink-600">{r.txt}</span></div></div>);})}</div></Card>);
+}
 
 /* Tableau de bord */
 function Dashboard({c,alloc,data,setData,hist,go}){
@@ -455,6 +477,12 @@ function Patrimoine({data,setData,c,alloc}){
   const addD=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"Nouvelle dette",montant:0,taux:0.03,actifLie:""}]}));
   const detteFor=aid=>sum((data.dettes||[]).filter(x=>x.actifLie===aid),x=>x.montant);
   const nomActif=aid=>{const a=data.patrimoine.find(x=>x.id===aid);return a?a.nom:"";};
+  const finBrut=sum(data.patrimoine,a=>a.montant);
+  const tips=[];
+  if(c.brut>0&&c.immoValeur/c.brut>0.65) tips.push({tone:"info",titre:"Poids de l'immobilier",txt:"l'immobilier pèse "+fmtP(c.immoValeur/c.brut)+" de ton patrimoine. Des actifs plus liquides (bourse) équilibreraient le risque."});
+  if(c.brut>0&&c.cash/c.brut<0.05) tips.push({tone:"warn",titre:"Peu de liquidités",txt:"tes liquidités ne font que "+fmtP(c.cash/c.brut)+" du patrimoine. Garde de quoi saisir les opportunités et absorber les imprévus."});
+  if(c.brut>0&&c.dettesT/c.brut>0.6) tips.push({tone:"warn",titre:"Endettement élevé",txt:"tes dettes représentent "+fmtP(c.dettesT/c.brut)+" de tes actifs."});
+  if(!tips.length&&c.brut>0) tips.push({tone:"good",titre:"Allocation équilibrée",txt:"continue d'alimenter régulièrement pour faire jouer la boule de neige."});
   return (<div className="space-y-5">
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <KPI label="Patrimoine brut" value={fmtE(c.brut)} icon="bank"/>
@@ -489,7 +517,8 @@ function Patrimoine({data,setData,c,alloc}){
       </div>
       <div className="flex justify-between mt-3 pt-3 border-t border-ink-200 text-sm">
         <span className="font-heading font-semibold text-ink-700">Total</span>
-        <span className="font-heading font-bold text-brand-700">{fmtE(c.brut)} <span className="text-ink-400 font-normal">· plus-value latente {fmtE(c.pvLatente)}</span></span></div>
+        <span className="font-heading font-bold text-brand-700">{fmtE(finBrut)}</span></div>
+      <p className="text-xs text-ink-400 mt-2">Le patrimoine brut total ({fmtE(c.brut)}, KPI en haut) inclut aussi l'immobilier ({fmtE(c.immoValeur)}) et la bourse ({fmtE(c.bourseValeur)}), gérés dans leurs onglets.</p>
     </Card>
     <Card title="Mes crédits">
       <div className="flex items-center justify-between">
@@ -497,6 +526,7 @@ function Patrimoine({data,setData,c,alloc}){
         <div className="font-heading font-bold text-red-500">{fmtE(c.dettesT)}</div></div>
       <p className="text-xs text-ink-400 mt-2">Tes crédits se gèrent dans l'onglet <b>Cashflow</b> : leurs mensualités sont des dépenses, et tu peux les rattacher à un bien.</p>
     </Card>
+    <Conseils items={tips}/>
     <Card title="En clair">
       <ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
         <li><b>Ce que ça vaut</b> : le prix si tu vendais aujourd'hui. C'est ce chiffre qui compte dans ton patrimoine.</li>
@@ -545,6 +575,11 @@ function Immobilier({data,setData}){
   else { const t=list.reduce((s,b)=>{const c=calcMdb(b);s.eng+=n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux);s.rev+=n(b.prixRevente);s.net+=c.net;return s;},{eng:0,rev:0,net:0});
     kpis=[["Capital engagé",fmtE(t.eng),null,"ink"],["Revente estimée",fmtE(t.rev),null,"blue"],["Marge nette estimée",fmtE(t.net),null,t.net>=0?"blue":"red"],["Opérations",list.length,null,"ink"]]; }
 
+  const tips=[];
+  if(mode==="Locatif") list.forEach(b=>{const cc=calcLoc(b); if(coutRevient(b)>0){ if(cc.cfMois<0) tips.push({tone:"warn",titre:b.nom,txt:"cashflow négatif de "+fmtE(-cc.cfMois)+" par mois. Vérifie loyer, charges ou financement."}); else if(cc.rdtNet<0.03) tips.push({tone:"info",titre:b.nom,txt:"rendement net faible ("+fmtP(cc.rdtNet)+"). Sous 3%, l'effet de levier rapporte peu."}); }});
+  if(mode==="MDB") list.forEach(b=>{const cc=calcMdb(b); if(n(b.prixRevente)>0&&cc.net<0) tips.push({tone:"warn",titre:b.nom,txt:"marge nette négative. Revois prix de revente, travaux ou durée de portage."}); else if(cc.roiAn>0&&cc.roiAn<0.1) tips.push({tone:"info",titre:b.nom,txt:"rentabilité annualisée modeste ("+fmtP(cc.roiAn)+")."});});
+  if(mode==="RP") list.forEach(b=>{const pv=n(b.valeur)-coutRevient(b); if(pv>0) tips.push({tone:"good",titre:b.nom,txt:"plus-value latente de "+fmtE(pv)+", exonérée à la revente."});});
+
   return (<div className="space-y-5">
     <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit">
       {IMMO_MODES.map(([k,l])=><button key={k} onClick={()=>setMode(k)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition "+(mode===k?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}>{l}</button>)}
@@ -566,6 +601,9 @@ function Immobilier({data,setData}){
             <IconBtn name="x" onClick={()=>del(b.id)} title="Supprimer"/>
           </div>
           {o&&<div className="px-3 pb-3 pt-2 border-t border-ink-100 space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-ink-500">Type :</span>
+              <select value={b.usage} onChange={e=>upd(b.id,{usage:e.target.value})} className="text-sm rounded-xl border border-ink-200 py-1.5 px-2 text-ink-600 bg-white">{IMMO_MODES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+              <span className="text-ink-400 text-xs">changer le mode déplace ce bien (l'achat, les frais et les travaux sont conservés)</span></div>
             <Acquisition b={b} upd={upd}/>
             {mode==="RP"&&<>
               <div className="grid sm:grid-cols-3 gap-3">
@@ -636,7 +674,51 @@ function Immobilier({data,setData}){
         <li>Regarde la <b>rentabilité annualisée</b> : 15% sur 6 mois ne vaut pas 15% sur 24 mois.</li>
       </ul>}
     </Card>
-    <p className="text-xs text-ink-400 px-1">Module autonome pour l'instant. Prochaine étape : relier valeurs, loyers et crédits au tableau de bord et au cashflow global.</p>
+    <Conseils items={tips}/>
+    <p className="text-xs text-ink-400 px-1">La valeur et les crédits des résidences principales et des biens locatifs sont déjà comptés dans ton patrimoine net ; le cashflow locatif et les loyers alimentent ton tableau de bord. Les opérations d'achat-revente restent à part (ce ne sont pas un patrimoine durable).</p>
+  </div>);
+}
+
+/* Bourse / Investissement */
+const BOURSE_TYPES=["Action","ETF","Obligation","Crypto","Fonds","Autre"];
+function Bourse({data,setData}){
+  const lignes=data.bourse||[];
+  const upd=(id,p)=>setData(d=>({...d,bourse:(d.bourse||[]).map(x=>x.id===id?{...x,...p}:x)}));
+  const del=id=>setData(d=>({...d,bourse:(d.bourse||[]).filter(x=>x.id!==id)}));
+  const add=()=>setData(d=>({...d,bourse:[...(d.bourse||[]),{id:uid(),nom:"Nouvelle ligne",type:"ETF",investi:0,valeur:0,dividendes:0}]}));
+  const tot=lignes.reduce((s,x)=>{s.investi+=n(x.investi);s.valeur+=n(x.valeur);s.div+=n(x.dividendes);return s;},{investi:0,valeur:0,div:0});
+  const pv=tot.valeur-tot.investi, perf=tot.investi>0?pv/tot.investi:0, rdtDiv=tot.valeur>0?tot.div/tot.valeur:0;
+  const tips=[];
+  if(lignes.length&&lignes.length<3) tips.push({tone:"info",titre:"Diversification",txt:"Tu as "+lignes.length+" ligne(s). Diversifier (ETF large, secteurs, zones) réduit le risque."});
+  const dom=lignes.slice().sort((a,b)=>n(b.valeur)-n(a.valeur))[0];
+  if(dom&&tot.valeur>0&&n(dom.valeur)/tot.valeur>0.4) tips.push({tone:"warn",titre:"Concentration",txt:"« "+dom.nom+" » pèse "+fmtP(n(dom.valeur)/tot.valeur)+" de ton portefeuille."});
+  if(tot.investi>0&&perf<0) tips.push({tone:"warn",titre:"Performance",txt:"Portefeuille en moins-value de "+fmtP(Math.abs(perf))+". Sur le long terme, évite de vendre dans la panique."});
+  else if(tot.investi>0) tips.push({tone:"good",titre:"Performance",txt:"Plus-value latente de "+fmtE(pv)+" ("+fmtP(perf)+")."});
+  return (<div className="space-y-5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <KPI label="Valeur portefeuille" value={fmtE(tot.valeur)} icon="trending" tone="blue"/>
+      <KPI label="Montant investi" value={fmtE(tot.investi)}/>
+      <KPI label="Plus-value latente" value={fmtE(pv)} tone={pv>=0?"blue":"red"}/>
+      <KPI label="Dividendes" value={fmtE(tot.div)+" / an"} tone="blue"/>
+    </div>
+    <Card title="Mon portefeuille" sub="Pour chaque ligne : montant investi, valeur actuelle, dividendes annuels. Performance et rendement calculés." right={<AddBtn onClick={add}>Ajouter</AddBtn>}>
+      {lignes.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Ajoute ta première ligne (action, ETF, crypto...).</div>}
+      <div className="space-y-2">
+        <div className="hidden md:flex gap-2 text-xs text-ink-400 px-1"><div className="flex-1">Ligne</div><div className="w-28">Type</div><div className="w-28 text-right pr-7">Investi</div><div className="w-28 text-right pr-7">Valeur</div><div className="w-28 text-right pr-7">Dividendes/an</div><div className="w-16 text-right">Perf.</div><div className="w-8"/></div>
+        {lignes.map(x=>{const p=n(x.investi)>0?(n(x.valeur)-n(x.investi))/n(x.investi):0; return(
+          <div key={x.id} className="flex flex-wrap md:flex-nowrap items-center gap-2">
+            <div className="flex-1 min-w-[130px]"><TextInput value={x.nom} onChange={v=>upd(x.id,{nom:v})}/></div>
+            <select value={x.type} onChange={e=>upd(x.id,{type:e.target.value})} className="w-28 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{BOURSE_TYPES.map(t=><option key={t}>{t}</option>)}</select>
+            <Money value={x.investi} onChange={v=>upd(x.id,{investi:v})} className="w-28"/>
+            <Money value={x.valeur} onChange={v=>upd(x.id,{valeur:v})} className="w-28"/>
+            <Money value={x.dividendes} onChange={v=>upd(x.id,{dividendes:v})} className="w-28"/>
+            <div className={"w-16 text-right text-sm font-semibold "+(p>=0?"text-brand-700":"text-red-500")}>{(p>=0?"+":"")+fmtP(p)}</div>
+            <IconBtn name="x" onClick={()=>del(x.id)} title="Supprimer"/></div>);})}
+      </div>
+      <div className="flex justify-between mt-3 pt-3 border-t border-ink-200 text-sm"><span className="font-heading font-semibold text-ink-700">Total</span><span className="font-heading font-bold text-brand-700">{fmtE(tot.valeur)} <span className="text-ink-400 font-normal">· perf {(perf>=0?"+":"")+fmtP(perf)} · rendement dividende {fmtP(rdtDiv)}</span></span></div>
+    </Card>
+    <Conseils items={tips}/>
+    <p className="text-xs text-ink-400 px-1">Cette valeur et ces dividendes sont déjà comptés dans ton patrimoine net et tes revenus passifs. Prochaines étapes : suivi des apports et de la performance dans le temps.</p>
   </div>);
 }
 
@@ -660,6 +742,11 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
   const verdict = c.tauxEpargne>=0.5?{t:"Excellent",c:"text-brand-700",d:"Tu épargnes plus de la moitié de tes revenus."}
     : c.tauxEpargne>=0.2?{t:"Correct",c:"text-sky-700",d:"Au-dessus du seuil sain de 20%. Tu peux encore optimiser tes postes en rouge."}
     : {t:"À améliorer",c:"text-amber-700",d:"Sous le seuil sain de 20%. Vise d'abord tes postes en rouge."};
+  const tips=[];
+  const over=groupes.filter(g=>g.pct!=null&&g.ratio>1.3).sort((a,b)=>b.part-a.part)[0];
+  if(over) tips.push({tone:"warn",titre:over.nom,txt:"ce poste pèse "+fmtP(over.part)+" de tes revenus (repère "+Math.round(over.pct*100)+"%). C'est ton premier levier d'optimisation."});
+  if(c.cashflow<0) tips.push({tone:"warn",titre:"Cashflow négatif",txt:"tu dépenses plus que tu ne gagnes ce mois. Réduis d'abord tes plus gros postes."});
+  else if(c.tauxEpargne>=0.5) tips.push({tone:"good",titre:"Très bon taux d'épargne",txt:"tu mets de côté "+fmtP(c.tauxEpargne)+", soit "+fmtE(c.cashflow*12)+" par an à investir."});
   return (<div className="space-y-5">
     <Card><div className="flex flex-wrap items-center gap-3">
       <label className="text-sm text-ink-600 font-medium">Mois :</label>
@@ -713,6 +800,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
           {g.pct!=null&&<div className="absolute top-0 bottom-0 w-px bg-ink-500/50" style={{left:Math.min(100,g.pct/maxPart*100)+"%"}}/>}</div></div>))}</div>
       <p className="text-xs text-ink-400 mt-4">Tes dépenses sont regroupées par poste : l'électricité, l'eau et internet font partie du logement, la voiture est à part. Chaque poste est comparé à son repère sain (le trait gris). Bleu sous le repère, orange un peu au-dessus, rouge nettement au-dessus.</p>
     </Card>
+    <Conseils items={tips}/>
     <Card><div className="flex items-center justify-between">
       <div><div className="text-ink-600">Cashflow net du mois</div>
         <div className="text-xs text-ink-400 mt-0.5">Revenus moins dépenses moins crédits. Taux d'épargne {fmtP(c.tauxEpargne)}, soit {fmtE(c.cashflow*12)} par an</div></div>
@@ -737,6 +825,10 @@ function Projection({data,setData,c}){
   const scen=[["Prudent",0.04,"#94a3b8"],["Base",0.08,"#0284c7"],["Ambitieux",0.15,"#38bdf8"]];
   const trajs=scen.map(([nom,r,col])=>({nom,col,...projeter(start,totCF,r,c.objEUR,15)}));
   const hitAnnee=trajs[1].hit?annee-1+trajs[1].hit:null;
+  const tips=[];
+  if(totCF<=0) tips.push({tone:"warn",titre:"Pas d'épargne planifiée",txt:"ton plan ne dégage pas d'apport. Sans épargne réinvestie, seul le rendement fait grossir le capital."});
+  else if(hitAnnee) tips.push({tone:"good",titre:"Objectif atteignable",txt:"au rythme « Base » (8%), tu atteins ton objectif en "+hitAnnee+". Augmenter l'apport ou le rendement le rapproche encore."});
+  else tips.push({tone:"info",titre:"Objectif lointain",txt:"avec ces hypothèses, l'objectif n'est pas atteint sous 15 ans. Augmente l'apport mensuel ou vise un meilleur rendement."});
   return (<div className="space-y-5">
     <Card title={"Plan mensuel "+annee} sub="Prévois revenus et dépenses mois par mois pour l'année prochaine. C'est un budget prévisionnel, indépendant du Cashflow réel.">
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -780,6 +872,7 @@ function Projection({data,setData,c}){
           <span className="text-ink-600">{t.nom} ({fmtP(scen[i][1])}) : objectif {t.hit?("en "+(annee-1+t.hit)):"au-delà de 15 ans"}</span></div>))}
       </div>
     </Card>
+    <Conseils items={tips}/>
   </div>);
 }
 

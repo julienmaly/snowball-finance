@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Snowball Finance</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = { theme: { extend: {
+    fontFamily: { heading:['Outfit','sans-serif'], sans:['Inter','sans-serif'] },
+    colors: { brand: {50:'#f0f9ff',100:'#e0f2fe',200:'#bae6fd',300:'#7dd3fc',400:'#38bdf8',
+      500:'#0ea5e9',600:'#0284c7',700:'#0369a1',800:'#075985',900:'#0c4a6e'},
+      ink:{900:'#0f172a',700:'#334155',500:'#64748b',400:'#94a3b8',200:'#e2e8f0',100:'#f1f5f9'} } } } };
+</script>
+<style>
+  html{font-family:'Inter',sans-serif;}
+  body{color:#0f172a;min-height:100vh;background:#f7f9fc;}
+  h1,h2,h3,.font-heading{font-family:'Outfit',sans-serif;}
+  .num::-webkit-outer-spin-button,.num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .num{-moz-appearance:textfield;}
+  .panel{background:#fff;border:1px solid #e9eef4;box-shadow:0 1px 2px rgba(15,23,42,.04),0 10px 26px -18px rgba(15,23,42,.18);}
+  .frost{background:rgba(255,255,255,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #e9eef4;}
+  .card{transition:box-shadow .25s ease, transform .25s ease;}
+  .card-h:hover{box-shadow:0 16px 38px -20px rgba(15,23,42,.28);transform:translateY(-2px);}
+  ::selection{background:#bae6fd;}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef } = React;
+const KEY = "snowball-finance-v2";
+
+/* utilitaires */
+let _seq = 0;
+const uid = () => "id" + (++_seq) + Math.random().toString(36).slice(2,6);
+const n = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+const sum = (arr, f) => (arr||[]).reduce((s,x)=>s + n(f?f(x):x), 0);
+const fmtE = v => (isFinite(v)?Math.round(v):0).toLocaleString("fr-FR") + " €";
+const fmtEk = v => Math.abs(v)>=1000 ? Math.round(v/1000).toLocaleString("fr-FR")+" k€" : Math.round(v)+" €";
+const fmtUSD = v => (isFinite(v)?Math.round(v):0).toLocaleString("fr-FR") + " $";
+const fmtP = v => (isFinite(v)?(v*100):0).toFixed(1).replace(".",",") + " %";
+const fmtM = v => (isFinite(v)?v:0).toFixed(1).replace(".",",") + " mois";
+const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+const moisLong = ym => { if(!ym) return ""; const [y,m]=ym.split("-"); return MOIS[+m-1]+" "+y; };
+const moisCourt = ym => { const [y,m]=ym.split("-"); return MOIS[+m-1].slice(0,4)+". "+y.slice(2); };
+const nowYM = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); };
+
+const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function useCountUp(value){
+  const [v,setV]=useState(value);
+  useEffect(()=>{ if(reduceMotion()){ setV(value); return; }
+    let raf, start; const to=value||0, dur=700;
+    const tick=t=>{ if(!start)start=t; const p=Math.min(1,(t-start)/dur);
+      setV(to*(1-Math.pow(1-p,3))); if(p<1) raf=requestAnimationFrame(tick); };
+    raf=requestAnimationFrame(tick); return ()=>cancelAnimationFrame(raf); },[value]);
+  return v;
+}
+
+/* icônes */
+const PATHS={
+  dashboard:"M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z",
+  wallet:"M21 12V7H5a2 2 0 0 1 0-4h14v4M3 5v14a2 2 0 0 0 2 2h16v-5M18 12a2 2 0 0 0 0 4h4v-4h-4z",
+  bank:"M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3",
+  trending:"M23 6l-9.5 9.5-5-5L1 18M17 6h6v6",
+  chart:"M3 3v18h18M7 16l4-6 4 4 5-7",
+  target:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  settings:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+  plus:"M12 5v14M5 12h14", x:"M18 6L6 18M6 6l12 12", check:"M20 6L9 17l-5-5",
+  down:"M12 3v12M7 10l5 5 5-5M5 21h14", up:"M12 21V9M7 14l5-5 5 5M5 3h14", refresh:"M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15",
+};
+function Icon({name,className="w-5 h-5",stroke=2}){
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}><path d={PATHS[name]}/></svg>;
+}
+function Snowflake({className="w-7 h-7"}){
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={className}>
+    <path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1"/>
+    <path d="M12 5l2 2-2 2-2-2 2-2zM12 15l2 2-2 2-2-2 2-2zM5 12l2-2 2 2-2 2-2-2zM15 12l2-2 2 2-2 2-2-2z" strokeWidth="1.4"/></svg>;
+}
+
+/* défauts neutres */
+function defaultData(){
+  const ym=nowYM();
+  return { version:4,
+    params:{ eurusd:1.08, objectifEUR:1000000, retraitFI:0.04, cibleFondsMois:6 },
+    patrimoine:[
+      { id:uid(), nom:"Compte courant", etablissement:"Ma banque", pays:"France", montant:0, prixRevient:0, classe:"Liquidités" },
+      { id:uid(), nom:"Résidence", etablissement:"", pays:"France", montant:0, prixRevient:0, classe:"Immobilier" } ],
+    dettes:[ { id:uid(), nom:"Crédit immobilier", montant:0, taux:0.03, actifLie:"" } ],
+    moisActif:ym,
+    mois:{ [ym]:{ revenus:[ {id:uid(),nom:"Salaire",montant:0,type:"actif"} ],
+      depenses:[ {id:uid(),nom:"Loyer",montant:0},{id:uid(),nom:"Alimentation",montant:0},{id:uid(),nom:"Eau",montant:0} ] } },
+    suivi:[ {id:uid(),annee:new Date().getFullYear(),brut:0,dettes:0} ],
+    snapshots:{}, actionsPerso:[],
+    jalons:[ {id:uid(),intitule:"Fonds d'urgence de 6 mois",categorie:"Sécurité",statut:"À faire"} ],
+    projection:{ annee:new Date().getFullYear()+1, rendement:0.08, mensuel:Array.from({length:12},()=>({rev:0,dep:0})) },
+  };
+}
+function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.parse(s);
+  if(d&&d.params){ if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
+    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[];
+    if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
+    return d; }} }catch(e){} return defaultData(); }
+
+/* synchro GitHub (repo privé, données récupérables partout) */
+const GH_KEY="snowball-gh";
+function loadGh(){ try{return JSON.parse(localStorage.getItem(GH_KEY))||{path:"snowball-data.json"};}catch(e){return {path:"snowball-data.json"};} }
+const b64enc=s=>btoa(unescape(encodeURIComponent(s)));
+const b64dec=s=>decodeURIComponent(escape(atob((s||"").replace(/\n/g,""))));
+async function ghGet(g){
+  const r=await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/contents/${g.path}`,
+    {headers:{Authorization:`Bearer ${g.token}`,Accept:"application/vnd.github+json"}});
+  if(r.status===404) return {sha:null,content:null};
+  if(!r.ok) throw new Error("lecture ("+r.status+")");
+  const j=await r.json(); return {sha:j.sha, content:b64dec(j.content)};
+}
+async function ghPut(g,str,sha){
+  const body={message:"Sauvegarde Snowball "+new Date().toISOString().slice(0,16).replace("T"," "), content:b64enc(str)};
+  if(sha) body.sha=sha;
+  const r=await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/contents/${g.path}`,
+    {method:"PUT",headers:{Authorization:`Bearer ${g.token}`,Accept:"application/vnd.github+json","Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok){ const t=await r.text(); throw new Error("écriture ("+r.status+") "+t.slice(0,80)); }
+  return true;
+}
+
+const CLASSES=["Private Equity","Immobilier","Liquidités","Bourse","Cryptos","Autres"];
+const COULEURS={ "Private Equity":"#0369a1","Immobilier":"#0ea5e9","Liquidités":"#38bdf8","Bourse":"#6366f1","Cryptos":"#8b5cf6","Autres":"#94a3b8" };
+const colorFor=(c,i)=> COULEURS[c] || ["#0284c7","#0ea5e9","#38bdf8","#6366f1","#8b5cf6","#94a3b8"][i%6];
+const BLUE="#0284c7";
+
+/* regroupement des dépenses par poste de budget (logique PRIME) */
+const GROUPES=[
+  {nom:"Logement",pct:0.33,k:["loyer","hypoth","charge","copro","electric","électric","eau","gaz","internet","telephone","téléphone","box","chauffage","maintenance","reparation","réparation","aide maison","menage","ménage"]},
+  {nom:"Alimentation",pct:0.15,k:["aliment","course","nourriture","food","repas"]},
+  {nom:"Transport",pct:0.15,k:["voiture","essence","carburant","transport","auto","train","metro","métro","peage","péage","moto","scooter","parking"]},
+  {nom:"Enfants",pct:0.12,k:["creche","crèche","ecole","école","garde","nounou","enfant"]},
+  {nom:"Assurances & santé",pct:0.08,k:["assur","mutuelle","sante","santé","medecin","médecin","pharmac"]},
+  {nom:"Loisirs & extras",pct:0.12,k:["sortie","loisir","habit","vetement","vêtement","voyage","vacance","restaurant","resto","abonnement","animaux","cigarette","cadeau","charite","charité","sport"]},
+];
+function groupeOf(nom){const l=(nom||"").toLowerCase(); for(const g of GROUPES){ if(g.k.some(k=>l.includes(k))) return g.nom;} return "Autres";}
+
+/* projection multi-années partagée */
+function projeter(net, apportAnnuel, rdt, objEUR, ans){
+  const out=[]; let bal=net;
+  for(let i=1;i<=ans;i++){ const debut=bal; const pv=debut*rdt; bal=debut+pv+apportAnnuel; out.push({i, net:bal}); }
+  const hit=out.find(o=>o.net>=objEUR);
+  return { points:out, hit: hit?hit.i:null };
+}
+
+/* UI */
+function Card({title, sub, right, children, className="", hover=false}){
+  return (<div className={"card panel rounded-3xl p-5 sm:p-6 "+(hover?"card-h ":"")+className}>
+    {(title||right)&&<div className="flex items-start justify-between mb-4 gap-3">
+      <div>{title&&<h3 className="font-heading font-semibold text-ink-900">{title}</h3>}
+        {sub&&<p className="text-xs text-ink-500 mt-0.5">{sub}</p>}</div>{right}</div>}
+    {children}</div>);
+}
+function TextInput({value,onChange,placeholder,className=""}){
+  return <input className={"w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-ink-900 placeholder-ink-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition "+className}
+    value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)} />;
+}
+function Money({value,onChange,suffix="€",className=""}){
+  return (<div className={"relative "+className}>
+    <input type="number" className="num w-full text-right pr-8 pl-3 py-2 rounded-xl border border-ink-200 bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition"
+      value={value===0?"":value} placeholder="0" onChange={e=>onChange(n(e.target.value))} />
+    <span className="absolute right-3 top-2.5 text-ink-400 text-sm pointer-events-none">{suffix}</span></div>);
+}
+function Pct({value,onChange,className=""}){
+  return (<div className={"relative "+className}><input type="number" className="num w-full text-right pr-8 pl-3 py-2 rounded-xl border border-ink-200 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+    value={value===0?"":value*100} onChange={e=>onChange(n(e.target.value)/100)}/><span className="absolute right-3 top-2.5 text-ink-400 text-sm">%</span></div>);
+}
+function IconBtn({name,onClick,title}){
+  return <button onClick={onClick} title={title} className="text-ink-300 hover:text-red-500 hover:bg-red-50 rounded-lg p-1.5 transition cursor-pointer"><Icon name={name} className="w-4 h-4"/></button>;
+}
+function AddBtn({onClick,children}){
+  return <button onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-3 py-1.5 rounded-lg transition cursor-pointer"><Icon name="plus" className="w-4 h-4" stroke={2.5}/>{children}</button>;
+}
+function Mini({label,v,tone="brand"}){return <div className="bg-ink-100/70 rounded-xl p-3"><div className="text-xs text-ink-500">{label}</div><div className={"font-heading font-bold text-"+tone+"-700"}>{v}</div></div>;}
+
+/* graphiques */
+function Donut({data,size=150}){
+  const total=data.reduce((s,d)=>s+d.value,0);
+  if(total<=0) return <div className="text-sm text-ink-400 py-10 text-center">Aucune donnée</div>;
+  let acc=0; const stops=data.map(d=>{const a=acc/total*100;acc+=d.value;return `${d.color} ${a}% ${acc/total*100}%`;}).join(", ");
+  const hole=Math.round(size*0.6);
+  return (<div className="flex items-center gap-5 flex-wrap">
+    <div className="rounded-full shrink-0 relative" style={{width:size,height:size,background:`conic-gradient(${stops})`}}>
+      <div className="rounded-full bg-white absolute inset-0 m-auto flex flex-col items-center justify-center" style={{width:hole,height:hole}}>
+        <span className="text-[10px] uppercase tracking-wide text-ink-400">Total</span>
+        <span className="font-heading font-bold text-ink-900 text-sm">{fmtEk(total)}</span></div></div>
+    <div className="space-y-1.5 text-sm flex-1 min-w-[160px]">
+      {data.map((d,i)=>(<div key={i} className="flex items-center gap-2">
+        <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{background:d.color}}></span>
+        <span className="text-ink-600 truncate">{d.label}</span>
+        <span className="ml-auto font-semibold text-ink-900">{(d.value/total*100).toFixed(0)}%</span></div>))}
+    </div></div>);
+}
+function LineChart({series, labels, height=240, fmt=fmtEk}){
+  const W=680,H=height,padL=46,padB=26,padT=12,padR=14;
+  const all=series.flatMap(s=>s.points.filter(p=>p!=null)); if(!all.length) return null;
+  let max=Math.max(...all), min=Math.min(0,...all); if(max===min)max=min+1;
+  const nx=labels.length>1?labels.length-1:1;
+  const x=i=>padL+i*(W-padL-padR)/nx;
+  const y=v=>H-padB-(v-min)/(max-min)*(H-padB-padT);
+  const ticks=[0,.25,.5,.75,1].map(t=>min+(max-min)*t);
+  const poly=pts=>pts.map((p,i)=>p==null?null:`${x(i)},${y(p)}`).filter(Boolean).join(" ");
+  return (<svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{maxHeight:H}}>
+    <defs>{series.map((s,si)=>(<linearGradient key={si} id={"g"+si} x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stopColor={s.color} stopOpacity="0.22"/><stop offset="100%" stopColor={s.color} stopOpacity="0"/></linearGradient>))}</defs>
+    {ticks.map((t,i)=>(<g key={i}><line x1={padL} x2={W-padR} y1={y(t)} y2={y(t)} stroke="#eef2f7"/>
+      <text x={6} y={y(t)+4} fontSize="10" fill="#94a3b8">{fmt(t)}</text></g>))}
+    {labels.map((l,i)=> (labels.length<=13||i%Math.ceil(labels.length/8)===0) &&
+      <text key={i} x={x(i)} y={H-padB+16} fontSize="10" fill="#94a3b8" textAnchor="middle">{l}</text>)}
+    {series.map((s,si)=>{ if(!s.fill) return null; const idx=s.points.map((p,i)=>p==null?-1:i).filter(i=>i>=0); if(!idx.length) return null;
+      return <polygon key={si} fill={`url(#g${si})`} points={`${x(idx[0])},${y(min)} `+poly(s.points)+` ${x(idx[idx.length-1])},${y(min)}`}/>;})}
+    {series.map((s,si)=>(<polyline key={si} fill="none" stroke={s.color} strokeWidth="2.5" strokeDasharray={s.dash?"6 5":""} points={poly(s.points)}/>))}
+    {series.map((s,si)=>s.points.map((p,i)=> p!=null && <circle key={si+"_"+i} cx={x(i)} cy={y(p)} r="3" fill="#fff" stroke={s.color} strokeWidth="2"/>))}
+  </svg>);
+}
+function Sparkline({points,color=BLUE,w=110,h=34}){
+  if(!points||points.length<2) return null;
+  const max=Math.max(...points),min=Math.min(...points),d=max-min||1;
+  const pts=points.map((p,i)=>`${i*(w/(points.length-1))},${h-((p-min)/d)*(h-4)-2}`).join(" ");
+  return <svg width={w} height={h}><polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts}/></svg>;
+}
+function MiniBars({items}){
+  const max=Math.max(1,...items.map(i=>Math.abs(i.value)));
+  return (<div className="space-y-3">{items.map((it,i)=>(<div key={i}>
+    <div className="flex justify-between text-sm mb-1"><span className="text-ink-500">{it.label}</span>
+      <span className="font-semibold" style={{color:it.color}}>{fmtE(it.value)}</span></div>
+    <div className="h-2.5 rounded-full bg-ink-100 overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:Math.min(100,Math.abs(it.value)/max*100)+"%",background:it.color}}/></div>
+  </div>))}</div>);
+}
+
+/* ============================ APP ============================ */
+function App(){
+  const [data,setData]=useState(loadData);
+  const [tab,setTab]=useState("dashboard");
+  const [toast,setToast]=useState("");
+  const fileRef=useRef();
+  useEffect(()=>{ try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){} },[data]);
+  const flash=m=>{ setToast(m); setTimeout(()=>setToast(""),2200); };
+
+  /* ouverture : mois en cours */
+  useEffect(()=>{ setData(d=>{ const ym=nowYM(); if(d.mois[ym]) return {...d,moisActif:ym};
+    const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
+    const cl=a=>(a||[]).map(x=>({...x,id:uid()}));
+    return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(src.revenus),depenses:cl(src.depenses)}}}; }); },[]);
+
+  /* taux EUR/USD auto */
+  const fetchFX=()=>fetch('https://open.er-api.com/v6/latest/EUR').then(r=>r.json()).then(j=>{
+    if(j&&j.rates&&j.rates.USD){ setData(d=>({...d,params:{...d.params,eurusd:+j.rates.USD.toFixed(4),fxMaj:(j.time_last_update_utc||"").slice(0,16)}})); return true;} }).catch(()=>false);
+  useEffect(()=>{ fetchFX(); },[]);
+
+  const setParam=(k,v)=>setData(d=>({...d,params:{...d.params,[k]:v}}));
+  const moisActif=data.moisActif;
+  const mc=data.mois[moisActif]||{revenus:[],depenses:[]};
+  const setMc=(kind,lines)=>setData(d=>({...d,mois:{...d.mois,[moisActif]:{...(d.mois[moisActif]||{revenus:[],depenses:[]}),[kind]:lines}}}));
+
+  const c=useMemo(()=>{
+    const brut=sum(data.patrimoine,a=>a.montant), dettesT=sum(data.dettes,x=>x.montant), net=brut-dettesT;
+    const revT=sum(mc.revenus,r=>r.montant), revP=sum(mc.revenus.filter(r=>r.type==="passif"),r=>r.montant), revA=revT-revP;
+    const depCourante=sum(mc.depenses,x=>x.montant), mensuCredits=sum(data.dettes,x=>x.mensualite);
+    const depT=depCourante+mensuCredits, cash=sum(data.patrimoine.filter(a=>a.classe==="Liquidités"),a=>a.montant);
+    const cashflow=revT-depT, eur=data.params.eurusd||1.08, objEUR=data.params.objectifEUR||1000000;
+    const pvLatente=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"), a=>n(a.montant)-n(a.prixRevient));
+    return { brut,dettesT,net,netUSD:net*eur,revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
+      tauxEpargne:revT?cashflow/revT:0, objEUR, pctObj:objEUR?net/objEUR:0, reste:Math.max(0,objEUR-net),
+      ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
+  },[data,mc]);
+
+  useEffect(()=>{ const ym=nowYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.net) return d;
+    return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.net}}; }); },[c.net]);
+
+  const alloc=useMemo(()=>{ const m={}; data.patrimoine.forEach(a=>{m[a.classe]=(m[a.classe]||0)+n(a.montant);});
+    return Object.keys(m).filter(k=>m[k]>0).map((k,i)=>({label:k,value:m[k],color:colorFor(k,i)})); },[data.patrimoine]);
+  const histCashflow=useMemo(()=> Object.keys(data.mois).sort().map(ym=>{const mm=data.mois[ym];
+    return {ym,cf:sum(mm.revenus,r=>r.montant)-sum(mm.depenses,x=>x.montant)};}),[data.mois]);
+
+  const doExport=()=>{ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="snowball-data.json"; a.click(); flash("Données exportées"); };
+  const doImport=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.params){setData(d);flash("Données importées");} else flash("Fichier invalide"); }catch(err){flash("Erreur de lecture");} };
+    r.readAsText(f); };
+
+  const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["cashflow","Cashflow","wallet"],
+    ["projection","Projection","chart"],["suivi","Suivi","trending"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
+
+  return (<div className="min-h-screen">
+    <header className="max-w-6xl mx-auto px-4 pt-6 pb-2">
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 text-white flex items-center justify-center shadow-lg shadow-brand-500/25"><Snowflake/></div>
+        <div className="flex-1 min-w-[220px] flex items-center">
+          <h1 className="font-heading text-2xl font-bold text-ink-900 leading-tight">Snowball <span className="text-brand-600">Finance</span></h1>
+        </div>
+        <div className="text-right"><div className="text-xs text-ink-400 uppercase tracking-wide">Patrimoine net</div>
+          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.net)}</div></div>
+      </div>
+    </header>
+    <nav className="max-w-6xl mx-auto px-4 sticky top-2 z-20">
+      <div className="frost rounded-2xl p-1.5 flex gap-1 overflow-x-auto shadow-sm">
+        {tabs.map(([id,label,icon])=>(<button key={id} onClick={()=>setTab(id)}
+          className={"flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition cursor-pointer "+
+            (tab===id?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:text-ink-900 hover:bg-ink-100")}>
+          <Icon name={icon} className="w-4 h-4"/>{label}</button>))}
+      </div>
+    </nav>
+    <main className="max-w-6xl mx-auto px-4 py-6">
+      {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab}/>}
+      {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc}/>}
+      {tab==="cashflow"&&<Cashflow data={data} setData={setData} mc={mc} setMc={setMc} moisActif={moisActif} c={c}/>}
+      {tab==="projection"&&<Projection data={data} setData={setData} c={c}/>}
+      {tab==="suivi"&&<Suivi data={data} setData={setData} c={c} hist={histCashflow}/>}
+      {tab==="objectifs"&&<Objectifs data={data} setData={setData} c={c}/>}
+      {tab==="reglages"&&<Reglages data={data} setData={setData} setParam={setParam} doExport={doExport} fileRef={fileRef} doImport={doImport} flash={flash} fetchFX={()=>fetchFX().then(ok=>flash(ok?"Taux mis à jour":"Hors ligne, taux inchangé"))}/>}
+    </main>
+    <footer className="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-ink-400">Données enregistrées localement sur cet appareil. Pense à exporter et sauvegarder (Réglages).</footer>
+    {toast&&<div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium">{toast}</div>}
+  </div>);
+}
+
+/* KPI */
+function KPIHero({c}){
+  const v=useCountUp(c.net); const pct=Math.min(100,Math.max(0,c.pctObj*100));
+  return (<div className="card rounded-3xl p-6 relative overflow-hidden text-white" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)",boxShadow:"0 18px 44px -22px rgba(3,80,130,.6)"}}>
+    <div className="absolute -right-8 -top-8 opacity-15"><Snowflake className="w-40 h-40"/></div>
+    <div className="text-brand-50 text-sm flex items-center gap-2"><Icon name="bank" className="w-4 h-4"/>Patrimoine net</div>
+    <div className="font-heading text-4xl font-extrabold mt-1">{fmtE(v)}</div>
+    <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.netUSD)}</div>
+    <div className="mt-5">
+      <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObj)}</span></div>
+      <div className="h-2.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full rounded-full bg-white transition-all" style={{width:pct+"%"}}/></div>
+      <div className="text-xs text-brand-100 mt-1.5">Net {fmtE(c.net)} sur {fmtE(c.objEUR)}. Reste {fmtE(c.reste)}.</div>
+    </div></div>);
+}
+function KPI({label,value,sub,icon,tone="ink"}){
+  const tones={ink:"text-ink-900",blue:"text-brand-700",amber:"text-amber-600",red:"text-red-500"};
+  return (<div className="card card-h panel rounded-3xl p-5">
+    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-ink-400">{icon&&<Icon name={icon} className="w-4 h-4"/>}{label}</div>
+    <div className={"font-heading text-2xl font-bold mt-1.5 "+tones[tone]}>{value}</div>
+    {sub&&<div className="text-xs text-ink-500 mt-1">{sub}</div>}</div>);
+}
+
+/* insights */
+function insights(c,data){
+  const out=[]; const add=(tone,titre,txt)=>out.push({tone,titre,txt});
+  if(c.pctObj>=0.9&&c.pctObj<1) add("good","Tu y es presque","Plus que "+fmtE(c.reste)+" pour atteindre ton objectif. Un trimestre de cashflow peut suffire.");
+  if(c.pctObj>=1) add("good","Objectif atteint","Ton patrimoine net dépasse ton objectif. Fixe le prochain cap dans Réglages.");
+  if(c.ratioFI>=1) add("good","Indépendance financière","Tes revenus passifs couvrent 100% de ton train de vie. Tu es libre financièrement.");
+  else if(c.depT>0) add("info","Vers la liberté financière","Tes revenus passifs couvrent "+fmtP(c.ratioFI)+" de ton train de vie. Il te manque "+fmtE(c.depT-c.revP)+" par mois de passif pour être libre.");
+  const exces=c.cash-data.params.cibleFondsMois*c.depT;
+  if(c.depT>0&&c.fondsMois>data.params.cibleFondsMois+3) add("info","Du cash dort","Tu as "+fmtM(c.fondsMois)+" de réserve (cible "+data.params.cibleFondsMois+"). Environ "+fmtE(exces)+" pourraient être investis pour accélérer la boule de neige.");
+  if(c.depT>0&&c.fondsMois<data.params.cibleFondsMois) add("warn","Réserve à renforcer","Ton fonds d'urgence ("+fmtM(c.fondsMois)+") est sous ta cible de "+data.params.cibleFondsMois+" mois.");
+  const dCher=(data.dettes||[]).filter(d=>n(d.taux)>=0.07).sort((a,b)=>b.taux-a.taux)[0];
+  if(dCher) add("warn","Dette coûteuse","« "+dCher.nom+" » coûte "+fmtP(dCher.taux)+" par an. La rembourser équivaut à un rendement garanti supérieur à la plupart des placements.");
+  if(c.revT>0&&c.tauxEpargne>=0.5) add("good","Excellent taux d'épargne","Tu épargnes "+fmtP(c.tauxEpargne)+" de tes revenus, soit "+fmtE(c.cashflow*12)+" par an à réinvestir.");
+  else if(c.revT>0&&c.tauxEpargne<0.2) add("warn","Taux d'épargne faible","Tu n'épargnes que "+fmtP(c.tauxEpargne)+". Vise au moins 20% en revoyant tes plus grosses dépenses.");
+  if(c.pvLatente>0) add("info","Plus-value latente","Tu portes "+fmtE(c.pvLatente)+" de plus-value latente sur tes actifs. Elle se concrétisera à la revente.");
+  if(!out.length) add("info","Commence à remplir","Renseigne ton patrimoine et ton cashflow pour obtenir des recommandations personnalisées.");
+  return out;
+}
+const toneStyle={ good:{b:"border-brand-200 bg-brand-50",d:"bg-brand-500",t:"text-brand-800"},
+  info:{b:"border-sky-200 bg-sky-50",d:"bg-sky-500",t:"text-sky-800"},
+  warn:{b:"border-amber-200 bg-amber-50",d:"bg-amber-500",t:"text-amber-800"} };
+
+/* Tableau de bord */
+function Dashboard({c,alloc,data,setData,hist,go}){
+  const reco=insights(c,data); const spark=hist.map(h=>h.cf);
+  const avoirs=[...data.patrimoine].sort((a,b)=>n(b.montant)-n(a.montant));
+  const acts=data.actionsPerso||[];
+  const updAct=(id,p)=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).map(a=>a.id===id?{...a,...p}:a)}));
+  const delAct=id=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).filter(a=>a.id!==id)}));
+  const addAct=()=>setData(d=>({...d,actionsPerso:[...(d.actionsPerso||[]),{id:uid(),texte:"",fait:false}]}));
+  return (<div className="space-y-5">
+    <div className="grid lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-1"><KPIHero c={c}/></div>
+      <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4">
+        <KPI label="Cashflow ce mois" value={fmtE(c.cashflow)} sub={"Ce qu'il te reste après tes sorties"} icon="wallet" tone={c.cashflow>=0?"blue":"red"}/>
+        <KPI label="Taux d'épargne" value={fmtP(c.tauxEpargne)} sub="Part de tes revenus mise de côté" icon="trending" tone="blue"/>
+        <KPI label="Revenu passif" value={fmtE(c.revP)+" / mois"} sub="Ton moteur vers la liberté" icon="target" tone="blue"/>
+        <KPI label="Fonds d'urgence" value={fmtM(c.fondsMois)} sub={"Réserve de cash, cible "+data.params.cibleFondsMois+" mois"} icon="bank" tone={c.fondsMois<data.params.cibleFondsMois?"amber":"blue"}/>
+      </div>
+    </div>
+    <div className="grid lg:grid-cols-2 gap-5 items-start">
+      <Card title="Recommandations" sub="Générées automatiquement à partir de tes chiffres">
+        <div className="space-y-3">{reco.map((r,i)=>{const s=toneStyle[r.tone];return(
+          <div key={i} className={"rounded-2xl border p-4 flex gap-3 "+s.b}><span className={"w-2 h-2 rounded-full mt-2 shrink-0 "+s.d}/>
+            <div><div className={"font-heading font-semibold text-sm "+s.t}>{r.titre}</div>
+              <div className="text-sm text-ink-600 mt-0.5">{r.txt}</div></div></div>);})}</div>
+      </Card>
+      <Card title="Mon plan d'action" sub="Tes propres actions à mettre en place" right={<AddBtn onClick={addAct}>Ajouter</AddBtn>}>
+        {acts.length===0&&<div className="text-sm text-ink-400 py-6 text-center">Ajoute tes actions personnelles à suivre ici.</div>}
+        <div className="space-y-2">{acts.map(a=>(<div key={a.id} className="flex items-center gap-2">
+          <button onClick={()=>updAct(a.id,{fait:!a.fait})} className={"w-6 h-6 shrink-0 rounded-lg border flex items-center justify-center cursor-pointer transition "+(a.fait?"bg-brand-500 border-brand-500 text-white":"border-ink-200 bg-white text-transparent hover:border-brand-400")}><Icon name="check" className="w-4 h-4" stroke={3}/></button>
+          <input className={"flex-1 px-3 py-2 rounded-xl border border-ink-200 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 "+(a.fait?"line-through text-ink-400":"text-ink-900")}
+            value={a.texte} placeholder="Mon action…" onChange={e=>updAct(a.id,{texte:e.target.value})}/>
+          <IconBtn name="x" onClick={()=>delAct(a.id)} title="Supprimer"/></div>))}</div>
+      </Card>
+    </div>
+    <div className="grid md:grid-cols-2 gap-5">
+      <Card title="Allocation du patrimoine" sub="Répartition par classe d'actifs"><Donut data={alloc}/></Card>
+      <Card title="Cashflow du mois" right={<button onClick={()=>go("cashflow")} className="text-xs text-brand-700 hover:underline cursor-pointer">Détailler</button>}>
+        <MiniBars items={[{label:"Revenus",value:c.revT,color:BLUE},{label:"Dépenses",value:c.depT,color:"#ef4444"},{label:"Cashflow net",value:c.cashflow,color:"#0ea5e9"}]}/>
+        {spark.length>1&&<div className="mt-4 flex items-center gap-3 text-xs text-ink-500"><span>Tendance</span><Sparkline points={spark}/></div>}
+        <div className="grid grid-cols-2 gap-3 mt-4"><Mini label="Revenu actif" v={fmtE(c.revA)}/><Mini label="Revenu passif" v={fmtE(c.revP)}/></div>
+      </Card>
+    </div>
+    <Card title="Mes avoirs" sub="Chaque actif et où il se trouve" right={<button onClick={()=>go("patrimoine")} className="text-xs text-brand-700 hover:underline cursor-pointer">Gérer</button>}>
+      <div className="divide-y divide-ink-100 max-h-72 overflow-y-auto -mx-1">
+        {avoirs.map(a=>(<div key={a.id} className="flex items-center gap-3 px-1 py-2.5">
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{background:colorFor(a.classe,0)}}/>
+          <div className="min-w-0"><div className="text-sm font-medium text-ink-900 truncate">{a.nom}</div>
+            <div className="text-xs text-ink-400 truncate">{[a.etablissement,a.pays].filter(Boolean).join(", ")||a.classe}</div></div>
+          <div className="ml-auto text-sm font-semibold text-ink-900">{fmtE(a.montant)}</div></div>))}
+      </div></Card>
+  </div>);
+}
+
+/* Patrimoine */
+function Patrimoine({data,setData,c,alloc}){
+  const [open,setOpen]=useState({});
+  const updA=(id,p)=>setData(d=>({...d,patrimoine:d.patrimoine.map(a=>a.id===id?{...a,...p}:a)}));
+  const delA=id=>setData(d=>({...d,patrimoine:d.patrimoine.filter(a=>a.id!==id)}));
+  const addA=()=>setData(d=>({...d,patrimoine:[...d.patrimoine,{id:uid(),nom:"Nouvel actif",etablissement:"",pays:"",montant:0,prixRevient:0,classe:"Liquidités"}]}));
+  const updD=(id,p)=>setData(d=>({...d,dettes:d.dettes.map(x=>x.id===id?{...x,...p}:x)}));
+  const delD=id=>setData(d=>({...d,dettes:d.dettes.filter(x=>x.id!==id)}));
+  const addD=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"Nouvelle dette",montant:0,taux:0.03,actifLie:""}]}));
+  const detteFor=aid=>sum((data.dettes||[]).filter(x=>x.actifLie===aid),x=>x.montant);
+  const nomActif=aid=>{const a=data.patrimoine.find(x=>x.id===aid);return a?a.nom:"";};
+  return (<div className="space-y-5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <KPI label="Patrimoine brut" value={fmtE(c.brut)} icon="bank"/>
+      <KPI label="Dettes" value={fmtE(c.dettesT)} tone="red"/>
+      <KPI label="Patrimoine net" value={fmtE(c.net)} tone="blue"/>
+      <KPI label="Plus-value latente" value={fmtE(c.pvLatente)} tone={c.pvLatente>=0?"blue":"red"}/></div>
+    <Card title="Allocation"><Donut data={alloc}/></Card>
+    <Card title="Mes actifs" sub="Écris simplement ce que tu as et ce que ça vaut aujourd'hui. Clique sur la flèche pour les détails (facultatif)." right={<AddBtn onClick={addA}>Ajouter</AddBtn>}>
+      <div className="space-y-2">
+        {data.patrimoine.map(a=>{const pv=n(a.prixRevient)>0?(n(a.montant)-n(a.prixRevient)):null; const det=detteFor(a.id); const o=open[a.id];return(
+          <div key={a.id} className="rounded-2xl border border-ink-100">
+            <div className="flex items-center gap-2 p-2">
+              <button onClick={()=>setOpen(s=>({...s,[a.id]:!o}))} className="text-ink-300 hover:text-brand-600 w-7 h-7 rounded-lg hover:bg-ink-100 cursor-pointer shrink-0" title="Détails">{o?"▾":"▸"}</button>
+              <div className="flex-1 min-w-[120px]"><TextInput value={a.nom} onChange={v=>updA(a.id,{nom:v})} placeholder="Ex : mon appartement"/></div>
+              <select value={a.classe} onChange={e=>updA(a.id,{classe:e.target.value})} className="w-32 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{CLASSES.map(cl=><option key={cl} value={cl}>{cl}</option>)}</select>
+              <Money value={a.montant} onChange={v=>updA(a.id,{montant:v})} className="w-32"/>
+              <IconBtn name="x" onClick={()=>delA(a.id)} title="Supprimer"/>
+            </div>
+            {o&&(()=>{const isLiq=a.classe==="Liquidités"; const costLabel=a.classe==="Immobilier"?"Coût total (achat + frais + travaux)":"Montant investi (ce que tu as mis)";
+              return(<div className="px-3 pb-3 pt-2 border-t border-ink-100 grid sm:grid-cols-2 gap-3">
+              <Field label="Où c'est placé (banque, courtier)"><TextInput value={a.etablissement||""} onChange={v=>updA(a.id,{etablissement:v})} placeholder="Facultatif"/></Field>
+              <Field label="Pays"><TextInput value={a.pays||""} onChange={v=>updA(a.id,{pays:v})} placeholder="Facultatif"/></Field>
+              {!isLiq&&<Field label={costLabel}><Money value={a.prixRevient||0} onChange={v=>updA(a.id,{prixRevient:v})}/></Field>}
+              {!isLiq&&<div className="flex flex-col justify-end text-sm pb-1">
+                {pv!=null&&<div>Plus-value latente : <b className={pv>=0?"text-brand-700":"text-red-500"}>{fmtE(pv)}</b> <span className="text-ink-400">(gain si tu vends aujourd'hui)</span></div>}
+                {det>0&&<div className="text-ink-500 mt-0.5">Crédit lié {fmtE(det)}, tu en possèdes vraiment {fmtE(n(a.montant)-det)}</div>}
+                {pv==null&&det===0&&<div className="text-xs text-ink-400">Indique le montant investi pour voir ta plus-value.</div>}
+              </div>}
+              {isLiq&&<div className="sm:col-span-2 text-xs text-ink-400">Pas de plus-value sur des liquidités, c'est du cash disponible.</div>}
+            </div>);})()}
+          </div>);})}
+      </div>
+      <div className="flex justify-between mt-3 pt-3 border-t border-ink-200 text-sm">
+        <span className="font-heading font-semibold text-ink-700">Total</span>
+        <span className="font-heading font-bold text-brand-700">{fmtE(c.brut)} <span className="text-ink-400 font-normal">· plus-value latente {fmtE(c.pvLatente)}</span></span></div>
+    </Card>
+    <Card title="Mes crédits">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-ink-600">Capital restant dû, déduit de ton patrimoine net.</div>
+        <div className="font-heading font-bold text-red-500">{fmtE(c.dettesT)}</div></div>
+      <p className="text-xs text-ink-400 mt-2">Tes crédits se gèrent dans l'onglet <b>Cashflow</b> : leurs mensualités sont des dépenses, et tu peux les rattacher à un bien.</p>
+    </Card>
+    <Card title="En clair">
+      <ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
+        <li><b>Ce que ça vaut</b> : le prix si tu vendais aujourd'hui. C'est ce chiffre qui compte dans ton patrimoine.</li>
+        <li><b>Ce que ça t'a coûté</b> : ce que tu as payé en tout (achat + travaux). Si ça vaut plus que ça t'a coûté, la différence est ta <b>plus-value latente</b> : un gain que tu touches le jour où tu revends.</li>
+        <li><b>Crédit rattaché</b> : ce que tu possèdes vraiment d'un bien, c'est sa valeur moins ce qu'il te reste à rembourser.</li>
+        <li>Exemple : appartement qui vaut 220 000, qui t'a coûté 185 000, avec 150 000 de crédit. Plus-value latente 35 000, et tu en possèdes vraiment 70 000.</li>
+      </ul>
+    </Card>
+  </div>);
+}
+
+/* Cashflow */
+function Cashflow({data,setData,mc,setMc,moisActif,c}){
+  const changeMois=ym=>setData(d=>{ if(!d.mois[ym]){ const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
+      const cl=a=>a.map(x=>({...x,id:uid()})); return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(src.revenus),depenses:cl(src.depenses)}}}; }
+    return {...d,moisActif:ym}; });
+  const upd=(k,id,patch)=>setMc(k,mc[k].map(x=>x.id===id?{...x,...patch}:x));
+  const del=(k,id)=>setMc(k,mc[k].filter(x=>x.id!==id));
+  const updC=(id,p)=>setData(d=>({...d,dettes:d.dettes.map(x=>x.id===id?{...x,...p}:x)}));
+  const delC=id=>setData(d=>({...d,dettes:d.dettes.filter(x=>x.id!==id)}));
+  const addC=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"Nouveau crédit",montant:0,mensualite:0,taux:0.03,actifLie:""}]}));
+  const mois=Object.keys(data.mois).sort();
+  const groupes=(()=>{const m={}; GROUPES.forEach(g=>m[g.nom]={nom:g.nom,pct:g.pct,total:0}); m["Autres"]={nom:"Autres",pct:null,total:0};
+    mc.depenses.forEach(p=>{m[groupeOf(p.nom)].total+=n(p.montant);});
+    return Object.values(m).filter(g=>g.total>0).map(g=>{const part=c.revT?g.total/c.revT:0; const ratio=g.pct?part/g.pct:0;
+      const color=g.pct==null?"#94a3b8":ratio<=1?BLUE:ratio<=1.3?"#f59e0b":"#ef4444"; return {...g,part,ratio,color};}).sort((a,b)=>b.total-a.total);})();
+  const maxPart=Math.max(0.01,...groupes.map(g=>g.part));
+  const aOptimiser=groupes.filter(g=>g.ratio>1.3).length;
+  const verdict = c.tauxEpargne>=0.5?{t:"Excellent",c:"text-brand-700",d:"Tu épargnes plus de la moitié de tes revenus."}
+    : c.tauxEpargne>=0.2?{t:"Correct",c:"text-sky-700",d:"Au-dessus du seuil sain de 20%. Tu peux encore optimiser tes postes en rouge."}
+    : {t:"À améliorer",c:"text-amber-700",d:"Sous le seuil sain de 20%. Vise d'abord tes postes en rouge."};
+  return (<div className="space-y-5">
+    <Card><div className="flex flex-wrap items-center gap-3">
+      <label className="text-sm text-ink-600 font-medium">Mois :</label>
+      <input type="month" value={moisActif} onChange={e=>changeMois(e.target.value)} className="px-3 py-2 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none"/>
+      <span className="text-xs text-ink-400">{mois.length} mois enregistré{mois.length>1?"s":""}. À l'ouverture, l'app se place sur le mois en cours.</span>
+      <div className="ml-auto flex gap-4 text-sm flex-wrap">
+        <span className="text-ink-500">Revenus <b className="text-brand-700">{fmtE(c.revT)}</b></span>
+        <span className="text-ink-500">Dépenses <b className="text-red-500">{fmtE(c.depCourante)}</b></span>
+        <span className="text-ink-500">Crédits <b className="text-red-500">{fmtE(c.mensuCredits)}</b></span>
+        <span className="text-ink-500">Cashflow <b className="text-sky-600">{fmtE(c.cashflow)}</b></span></div></div></Card>
+    <div className="grid md:grid-cols-2 gap-5 items-start">
+      <Card title="Revenus" right={<AddBtn onClick={()=>setMc("revenus",[...mc.revenus,{id:uid(),nom:"Nouveau revenu",montant:0,type:"passif"}])}>Ajouter</AddBtn>}>
+        <div className="space-y-2">{mc.revenus.map(r=>(<div key={r.id} className="flex items-center gap-2">
+          <div className="flex-1"><TextInput value={r.nom} onChange={v=>upd("revenus",r.id,{nom:v})}/></div>
+          <select value={r.type} onChange={e=>upd("revenus",r.id,{type:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="actif">actif</option><option value="passif">passif</option></select>
+          <Money value={r.montant} onChange={v=>upd("revenus",r.id,{montant:v})} className="w-28"/>
+          <IconBtn name="x" onClick={()=>del("revenus",r.id)} title="Supprimer"/></div>))}</div>
+        <Total label="Total revenus" v={c.revT}/></Card>
+      <Card title="Dépenses" right={<AddBtn onClick={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0}])}>Ajouter</AddBtn>}>
+        <div className="space-y-2">{mc.depenses.map(p=>(<div key={p.id} className="flex items-center gap-2">
+          <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
+          <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>
+          <IconBtn name="x" onClick={()=>del("depenses",p.id)} title="Supprimer"/></div>))}</div>
+        <Total label="Total dépenses" v={c.depCourante}/></Card>
+    </div>
+    <Card title="Crédits" sub="Leurs mensualités comptent dans ton cashflow. Le capital restant est déduit de ton patrimoine net. Rattache un crédit à un bien pour suivre ta valeur nette." right={<AddBtn onClick={addC}>Ajouter</AddBtn>}>
+      <div className="space-y-2">
+        <div className="hidden md:flex gap-2 text-xs text-ink-400 px-1"><div className="flex-1">Crédit</div><div className="w-36">Rattaché au bien</div><div className="w-24 text-right pr-1">Mensualité</div><div className="w-28 text-right pr-1">Capital restant</div><div className="w-16 text-right pr-1">Taux</div><div className="w-8"/></div>
+        {data.dettes.map(x=>(<div key={x.id} className="flex flex-wrap md:flex-nowrap items-center gap-2">
+          <div className="flex-1 min-w-[130px]"><TextInput value={x.nom} onChange={v=>updC(x.id,{nom:v})}/></div>
+          <select value={x.actifLie||""} onChange={e=>updC(x.id,{actifLie:e.target.value})} className="w-36 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white"><option value="">Aucun bien</option>{data.patrimoine.map(a=><option key={a.id} value={a.id}>{a.nom}</option>)}</select>
+          <Money value={x.mensualite||0} onChange={v=>updC(x.id,{mensualite:v})} className="w-24"/>
+          <Money value={x.montant} onChange={v=>updC(x.id,{montant:v})} className="w-28"/>
+          <Pct value={x.taux} onChange={v=>updC(x.id,{taux:v})} className="w-16"/>
+          <IconBtn name="x" onClick={()=>delC(x.id)} title="Supprimer"/></div>))}
+        {data.dettes.length===0&&<div className="text-sm text-ink-400 py-2">Aucun crédit. Ajoute en un si tu as un emprunt.</div>}
+      </div>
+      <Total label="Total mensualités" v={c.mensuCredits}/></Card>
+    <Card title="Où optimiser" sub="Tes dépenses regroupées par poste. Concentre tes efforts sur les barres rouges.">
+      <div className="grid md:grid-cols-3 gap-4 mb-5">
+        <div className="rounded-2xl p-4 bg-ink-100/70"><div className="text-xs text-ink-500">Taux d'épargne</div><div className={"font-heading text-2xl font-bold "+verdict.c}>{fmtP(c.tauxEpargne)}</div><div className="text-xs text-ink-500 mt-0.5">{verdict.t}. {verdict.d}</div></div>
+        <Mini label="Postes au-dessus du repère" v={aOptimiser>0?aOptimiser+" à challenger":"Aucun, bravo"} tone={aOptimiser>0?"red":"brand"}/>
+        <Mini label="Reste à vivre ou investir" v={fmtE(c.cashflow)+" par mois"} tone={c.cashflow>=0?"brand":"red"}/>
+      </div>
+      <div className="space-y-3">{groupes.map((g,i)=>(<div key={i}>
+        <div className="flex justify-between text-sm mb-1 gap-2">
+          <span className="text-ink-600">{g.nom}</span>
+          <span className="text-ink-500 shrink-0">{fmtE(g.total)} <b style={{color:g.color}}>({fmtP(g.part)})</b> {g.pct!=null&&<span className="text-ink-400">repère {Math.round(g.pct*100)}%</span>}</span></div>
+        <div className="h-2.5 rounded-full bg-ink-100 overflow-hidden relative">
+          <div className="h-full rounded-full" style={{width:Math.min(100,g.part/maxPart*100)+"%",background:g.color}}/>
+          {g.pct!=null&&<div className="absolute top-0 bottom-0 w-px bg-ink-500/50" style={{left:Math.min(100,g.pct/maxPart*100)+"%"}}/>}</div></div>))}</div>
+      <p className="text-xs text-ink-400 mt-4">Tes dépenses sont regroupées par poste : l'électricité, l'eau et internet font partie du logement, la voiture est à part. Chaque poste est comparé à son repère sain (le trait gris). Bleu sous le repère, orange un peu au-dessus, rouge nettement au-dessus.</p>
+    </Card>
+    <Card><div className="flex items-center justify-between">
+      <div><div className="text-ink-600">Cashflow net du mois</div>
+        <div className="text-xs text-ink-400 mt-0.5">Revenus moins dépenses moins crédits. Taux d'épargne {fmtP(c.tauxEpargne)}, soit {fmtE(c.cashflow*12)} par an</div></div>
+      <div className={"font-heading text-3xl font-bold "+(c.cashflow>=0?"text-brand-700":"text-red-500")}>{fmtE(c.cashflow)}</div></div></Card>
+  </div>);
+}
+function Total({label,v}){return <div className="flex justify-between mt-3 pt-3 border-t border-ink-200"><span className="font-heading font-semibold text-ink-700">{label}</span><span className="font-heading font-bold text-brand-700">{fmtE(v)}</span></div>;}
+
+/* Projection */
+function Projection({data,setData,c}){
+  const pr=data.projection;
+  const annee=pr.annee||(new Date().getFullYear()+1);
+  const rdt=pr.rendement!=null?pr.rendement:0.08;
+  const mensuel=(pr.mensuel&&pr.mensuel.length===12)?pr.mensuel:Array.from({length:12},()=>({rev:0,dep:0}));
+  const setPr=p=>setData(d=>({...d,projection:{...pr,annee,rendement:rdt,mensuel,...p}}));
+  const setM=(i,k,v)=>setPr({mensuel:mensuel.map((x,j)=>j===i?{...x,[k]:v}:x)});
+  const prefill=()=>setPr({mensuel:mensuel.map(()=>({rev:Math.round(c.revT),dep:Math.round(c.depT)}))});
+  const totRev=sum(mensuel,x=>x.rev), totDep=sum(mensuel,x=>x.dep), totCF=totRev-totDep;
+  const start=c.net, plusValue=start*rdt, netFin=start+totCF+plusValue;
+  const cum=[]; let acc=start; mensuel.forEach(x=>{acc+=n(x.rev)-n(x.dep); cum.push(acc);});
+  const presets=[["Prudent",0.04],["Base",0.08],["Ambitieux",0.15]];
+  const scen=[["Prudent",0.04,"#94a3b8"],["Base",0.08,"#0284c7"],["Ambitieux",0.15,"#38bdf8"]];
+  const trajs=scen.map(([nom,r,col])=>({nom,col,...projeter(start,totCF,r,c.objEUR,15)}));
+  const hitAnnee=trajs[1].hit?annee-1+trajs[1].hit:null;
+  return (<div className="space-y-5">
+    <Card title={"Plan mensuel "+annee} sub="Prévois revenus et dépenses mois par mois pour l'année prochaine. C'est un budget prévisionnel, indépendant du Cashflow réel.">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-1">
+          <button onClick={()=>setPr({annee:annee-1})} className="w-8 h-8 rounded-lg border border-ink-200 bg-white hover:bg-ink-100 cursor-pointer">‹</button>
+          <span className="font-heading font-bold text-lg text-ink-900 w-16 text-center">{annee}</span>
+          <button onClick={()=>setPr({annee:annee+1})} className="w-8 h-8 rounded-lg border border-ink-200 bg-white hover:bg-ink-100 cursor-pointer">›</button></div>
+        <div className="flex items-center gap-2 text-sm"><span className="text-ink-600">Rendement attendu :</span><Pct value={rdt} onChange={v=>setPr({rendement:v})} className="w-20"/>
+          <div className="flex gap-1.5">{presets.map(([l,v])=><button key={l} onClick={()=>setPr({rendement:v})} className={"text-xs px-2 py-1 rounded-lg border cursor-pointer transition "+(Math.abs(rdt-v)<0.001?"bg-brand-600 text-white border-brand-600":"border-ink-200 text-ink-600 hover:bg-ink-100")}>{l}</button>)}</div></div>
+        <button onClick={prefill} className="text-sm text-brand-700 hover:underline cursor-pointer ml-auto">Préremplir depuis mon mois actuel</button>
+      </div>
+      <div className="overflow-x-auto"><table className="w-full text-sm">
+        <thead><tr className="text-ink-400 text-left"><th className="py-2 font-medium">Mois</th><th className="font-medium">Revenus prévus</th><th className="font-medium">Dépenses prévues</th><th className="font-medium">Cashflow</th><th className="font-medium">Cumulé (net)</th></tr></thead>
+        <tbody>{mensuel.map((m,i)=>{const cf=n(m.rev)-n(m.dep);return(<tr key={i} className="border-t border-ink-100">
+          <td className="py-1.5 capitalize text-ink-700 font-medium w-28">{MOIS[i]}</td>
+          <td className="w-40 pr-2"><Money value={m.rev} onChange={v=>setM(i,"rev",v)}/></td>
+          <td className="w-40 pr-2"><Money value={m.dep} onChange={v=>setM(i,"dep",v)}/></td>
+          <td className={"font-medium "+(cf>=0?"text-brand-700":"text-red-500")}>{fmtE(cf)}</td>
+          <td className="font-heading font-semibold text-ink-900">{fmtEk(cum[i])}</td></tr>);})}</tbody>
+        <tfoot><tr className="border-t-2 border-ink-200 font-heading font-bold"><td className="py-2">Total {annee}</td>
+          <td className="text-brand-700">{fmtE(totRev)}</td><td className="text-red-500">{fmtE(totDep)}</td><td className="text-sky-600">{fmtE(totCF)}</td><td/></tr></tfoot>
+      </table></div>
+    </Card>
+    <div className="grid sm:grid-cols-4 gap-3">
+      <div className="card rounded-3xl p-4 text-white" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+        <div className="text-brand-50 text-xs">Patrimoine net fin {annee}</div><div className="font-heading text-2xl font-bold">{fmtE(netFin)}</div>
+        <div className="text-brand-100 text-xs mt-0.5">+{fmtE(netFin-start)} sur l'année</div></div>
+      <Mini label={"Apports cumulés "+annee} v={fmtE(totCF)}/>
+      <Mini label={"Plus-value estimée ("+fmtP(rdt)+")"} v={fmtE(plusValue)}/>
+      <Mini label="Objectif atteint" v={fmtP(netFin/c.objEUR)}/>
+    </div>
+    <Card title="Trajectoire du patrimoine net sur l'année" sub="Évolution mois par mois selon ton plan ci-dessus">
+      <LineChart labels={["déb.",...MOIS.map(m=>m.slice(0,3))]} series={[{name:"Net",color:BLUE,points:[start,...cum],fill:true}]} height={220}/>
+    </Card>
+    <Card title="Trajectoire vers l'objectif" sub={hitAnnee?("Au rythme « Base », objectif atteint en "+hitAnnee):"Augmente l'apport ou le rendement pour atteindre l'objectif sous 15 ans"}>
+      <LineChart labels={[String(annee-1),...trajs[1].points.map(p=>String(annee-1+p.i))]}
+        series={[...trajs.map(t=>({name:t.nom,color:t.col,points:[start,...t.points.map(p=>p.net)]})),
+          {name:"Objectif",color:"#cbd5e1",points:[c.objEUR,...trajs[1].points.map(()=>c.objEUR)],dash:true}]} height={250}/>
+      <div className="flex flex-wrap gap-4 mt-3 text-sm">
+        {trajs.map((t,i)=>(<div key={i} className="flex items-center gap-2"><span className="w-3 h-3 rounded-full" style={{background:t.col}}/>
+          <span className="text-ink-600">{t.nom} ({fmtP(scen[i][1])}) : objectif {t.hit?("en "+(annee-1+t.hit)):"au-delà de 15 ans"}</span></div>))}
+      </div>
+    </Card>
+  </div>);
+}
+
+/* Suivi */
+function Suivi({data,setData,c,hist}){
+  const upd=(id,p)=>setData(d=>({...d,suivi:d.suivi.map(r=>r.id===id?{...r,...p}:r)}));
+  const del=id=>setData(d=>({...d,suivi:d.suivi.filter(r=>r.id!==id)}));
+  const add=()=>setData(d=>{const last=[...d.suivi].sort((a,b)=>a.annee-b.annee).slice(-1)[0];
+    return {...d,suivi:[...d.suivi,{id:uid(),annee:(last?last.annee+1:new Date().getFullYear()),brut:0,dettes:0}]};});
+  const rows=[...data.suivi].sort((a,b)=>a.annee-b.annee);
+  const nets=rows.map(r=>n(r.brut)-n(r.dettes));
+  const snaps=Object.keys(data.snapshots||{}).sort();
+  const realNets=snaps.map(k=>data.snapshots[k]);
+  const pr=data.projection||{}; const plan=(pr.mensuel&&pr.mensuel.length===12)?pr.mensuel:[];
+  let acc=c.net; const projLabels=[],projNets=[];
+  plan.forEach((m,i)=>{acc+=n(m.rev)-n(m.dep); projLabels.push(MOIS[i].slice(0,3)+". "+String(pr.annee||"").slice(2)); projNets.push(acc);});
+  const npLabels=[...snaps.map(moisCourt),...projLabels]; const lastReal=realNets.length-1;
+  return (<div className="space-y-5">
+    <Card title="Patrimoine net" sub="Tes données réelles mois par mois (trait plein), prolongées par ton plan de l'année prochaine (pointillés)">
+      {snaps.length>0? <LineChart labels={npLabels}
+        series={[{name:"Réel",color:BLUE,points:[...realNets,...projNets.map(()=>null)],fill:true},
+          {name:"Projeté",color:"#7dd3fc",points:[...realNets.map((v,i)=>i===lastReal?v:null),...projNets],dash:true},
+          {name:"Objectif",color:"#cbd5e1",points:npLabels.map(()=>c.objEUR),dash:true}]} height={240}/>
+        : <div className="text-sm text-ink-400">Le suivi se construit automatiquement au fil des mois.</div>}
+    </Card>
+    <Card title="Cashflow mensuel" sub="Alimenté automatiquement par tes saisies de l'onglet Cashflow">
+      {hist.length? <LineChart labels={hist.map(h=>moisCourt(h.ym))} series={[{name:"Cashflow",color:"#0ea5e9",points:hist.map(h=>h.cf),fill:true}]} height={190}/>
+        : <div className="text-sm text-ink-400">Saisis des mois dans Cashflow pour voir la courbe.</div>}
+      {hist.length>0&&<div className="grid grid-cols-3 gap-3 mt-3">
+        <Mini label="Cashflow cumulé" v={fmtE(hist.reduce((s,h)=>s+h.cf,0))}/>
+        <Mini label="Moyenne par mois" v={fmtE(hist.reduce((s,h)=>s+h.cf,0)/hist.length)}/>
+        <Mini label="Meilleur mois" v={fmtE(Math.max(...hist.map(h=>h.cf)))}/></div>}
+    </Card>
+    <Card title="Historique annuel" sub="Complète les années passées (avant l'utilisation de l'app)" right={<AddBtn onClick={add}>Année</AddBtn>}>
+      {rows.length>1&&<div className="mb-4"><LineChart labels={rows.map(r=>r.annee)} series={[{name:"Net",color:"#0369a1",points:nets,fill:true}]} height={190}/></div>}
+      <div className="overflow-x-auto"><table className="w-full text-sm">
+        <thead><tr className="text-ink-400 text-left"><th className="py-2 font-medium">Année</th><th className="font-medium">Patrim. brut</th><th className="font-medium">Dettes</th><th className="font-medium">Patrim. net</th><th className="font-medium">Progr.</th><th/></tr></thead>
+        <tbody>{rows.map((r,i)=>{const net=n(r.brut)-n(r.dettes);const prev=i>0?nets[i-1]:null;const prog=prev?((net-prev)/prev):null;
+          return(<tr key={r.id} className="border-t border-ink-100">
+            <td className="py-1.5 w-24"><input type="number" value={r.annee} onChange={e=>upd(r.id,{annee:parseInt(e.target.value||0)})} className="num w-20 px-2 py-1.5 rounded-lg border border-ink-200 bg-white outline-none focus:border-brand-400"/></td>
+            <td className="w-40 pr-2"><Money value={r.brut} onChange={v=>upd(r.id,{brut:v})}/></td>
+            <td className="w-40 pr-2"><Money value={r.dettes} onChange={v=>upd(r.id,{dettes:v})}/></td>
+            <td className="font-heading font-semibold text-brand-700">{fmtE(net)}</td>
+            <td className={prog===null?"text-ink-400":(prog>=0?"text-brand-600":"text-red-500")}>{prog===null?"":(prog>=0?"+":"")+fmtP(prog)}</td>
+            <td><IconBtn name="x" onClick={()=>del(r.id)} title="Supprimer"/></td></tr>);})}</tbody></table></div>
+    </Card>
+  </div>);
+}
+
+/* Objectifs */
+const STATUTS=["À faire","En cours","Fait"];
+const stBadge={"Fait":"bg-brand-100 text-brand-800","En cours":"bg-amber-100 text-amber-700","À faire":"bg-ink-100 text-ink-500"};
+function suggestionsObj(c,data){
+  const out=[]; const norm=s=>(s||"").toLowerCase().replace(/\s/g,"");
+  const has=t=>data.jalons.some(j=>norm(j.intitule).includes(norm(t)));
+  if(c.depT>0 && c.fondsMois<data.params.cibleFondsMois && !has("fonds d'urgence")) out.push({texte:"Constituer "+data.params.cibleFondsMois+" mois de fonds d'urgence",categorie:"Sécurité"});
+  if(c.revT>0 && c.tauxEpargne<0.2 && !has("taux d'épargne")) out.push({texte:"Atteindre 20% de taux d'épargne",categorie:"Sécurité"});
+  if(c.depT>0 && c.ratioFI<1 && !has("100% du train de vie")) out.push({texte:"Couvrir 100% du train de vie en revenus passifs",categorie:"Revenus passifs"});
+  const dCher=(data.dettes||[]).filter(d=>n(d.taux)>=0.07).sort((a,b)=>b.taux-a.taux)[0];
+  if(dCher && !has("rembourser")) out.push({texte:"Rembourser « "+dCher.nom+" »",categorie:"Sécurité"});
+  const paliers=[100000,250000,500000,1000000,2000000,5000000]; const next=paliers.find(p=>p>c.net);
+  if(next && !has("net supérieur à "+next.toLocaleString("fr-FR"))) out.push({texte:"Patrimoine net supérieur à "+next.toLocaleString("fr-FR")+" €",categorie:"Patrimoine"});
+  const pRP=[1000,2500,5000,10000]; const nRP=pRP.find(p=>p>c.revP);
+  if(nRP && c.revP>0 && !has("passifs supérieurs à "+nRP.toLocaleString("fr-FR"))) out.push({texte:"Revenus passifs supérieurs à "+nRP.toLocaleString("fr-FR")+" € par mois",categorie:"Revenus passifs"});
+  return out.slice(0,5);
+}
+function Objectifs({data,setData,c}){
+  const upd=(id,p)=>setData(d=>({...d,jalons:d.jalons.map(j=>j.id===id?{...j,...p}:j)}));
+  const del=id=>setData(d=>({...d,jalons:d.jalons.filter(j=>j.id!==id)}));
+  const add=(texte,categorie)=>setData(d=>({...d,jalons:[...d.jalons,{id:uid(),intitule:texte||"Nouvel objectif",categorie:categorie||"",statut:"À faire"}]}));
+  const cnt=s=>data.jalons.filter(j=>j.statut===s).length, tot=data.jalons.length||1;
+  const sugg=suggestionsObj(c,data);
+  return (<div className="space-y-5">
+    <div className="grid grid-cols-3 gap-4">
+      <KPI label="Atteints" value={cnt("Fait")} tone="blue" icon="check"/>
+      <KPI label="En cours" value={cnt("En cours")} tone="amber"/>
+      <KPI label="À faire" value={cnt("À faire")}/></div>
+    <Card><div className="flex justify-between text-sm mb-1.5"><span className="text-ink-600">Progression globale</span><span className="font-semibold text-brand-700">{fmtP(cnt("Fait")/tot)}</span></div>
+      <div className="h-2.5 rounded-full bg-ink-100 overflow-hidden"><div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all" style={{width:(cnt("Fait")/tot*100)+"%"}}/></div></Card>
+    {sugg.length>0&&<Card title="Suggestions" sub="Proposées automatiquement à partir de tes chiffres. Bientôt enrichies par l'IA de pilotage.">
+      <div className="space-y-2">{sugg.map((s,i)=>(<div key={i} className="flex items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-3">
+        <span className="w-2 h-2 rounded-full bg-sky-500 shrink-0"/>
+        <div className="flex-1 text-sm text-ink-700">{s.texte}</div>
+        <button onClick={()=>add(s.texte,s.categorie)} className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-800 hover:underline cursor-pointer shrink-0"><Icon name="plus" className="w-4 h-4"/>Ajouter</button></div>))}</div>
+    </Card>}
+    <Card title="Mes objectifs" right={<AddBtn onClick={()=>add()}>Ajouter</AddBtn>}>
+      {data.jalons.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Aucun objectif. Ajoute le tien ou pioche dans les suggestions.</div>}
+      <div className="space-y-2">{data.jalons.map(j=>(<div key={j.id} className="flex items-center gap-2">
+        <div className="flex-1"><TextInput value={j.intitule} onChange={v=>upd(j.id,{intitule:v})}/></div>
+        <select value={j.statut} onChange={e=>upd(j.id,{statut:e.target.value})} className={"text-sm rounded-lg border-0 py-2 px-3 font-medium cursor-pointer "+stBadge[j.statut]}>{STATUTS.map(s=><option key={s} value={s}>{s}</option>)}</select>
+        <IconBtn name="x" onClick={()=>del(j.id)} title="Supprimer"/></div>))}</div></Card>
+  </div>);
+}
+
+/* Réglages */
+function Reglages({data,setData,setParam,doExport,fileRef,doImport,fetchFX,flash}){
+  const p=data.params;
+  const [gh,setGh]=useState(loadGh);
+  const [busy,setBusy]=useState("");
+  useEffect(()=>{try{localStorage.setItem(GH_KEY,JSON.stringify(gh));}catch(e){}},[gh]);
+  const setG=(k,v)=>setGh(s=>({...s,[k]:v}));
+  const ok=gh.token&&gh.owner&&gh.repo&&gh.path;
+  const sauver=async()=>{ if(!ok){flash("Renseigne le compte, le repo et le jeton");return;} setBusy("save");
+    try{ const cur=await ghGet(gh); await ghPut(gh,JSON.stringify(data,null,2),cur.sha); setGh(s=>({...s,maj:new Date().toISOString().slice(0,16).replace("T"," ")})); flash("Sauvegardé sur GitHub"); }
+    catch(e){ flash("Échec sauvegarde : "+e.message); } setBusy(""); };
+  const restaurer=async()=>{ if(!ok){flash("Renseigne le compte, le repo et le jeton");return;} setBusy("load");
+    try{ const cur=await ghGet(gh); if(cur&&cur.content){ const d=JSON.parse(cur.content); if(d&&d.params){setData(d);flash("Données restaurées depuis GitHub");} else flash("Sauvegarde invalide"); } else flash("Aucune sauvegarde trouvée"); }
+    catch(e){ flash("Échec restauration : "+e.message); } setBusy(""); };
+  return (<div className="space-y-5">
+    <Card title="Objectif et paramètres" sub="Tout est en euros par priorité. Le taux de change se récupère automatiquement.">
+      <div className="grid md:grid-cols-2 gap-4">
+        <Field label="Objectif de patrimoine net (en €)"><Money value={p.objectifEUR} onChange={v=>setParam("objectifEUR",v)}/></Field>
+        <Field label="Cible fonds d'urgence (mois)"><Money value={p.cibleFondsMois} onChange={v=>setParam("cibleFondsMois",v)} suffix="m"/></Field>
+        <Field label="Taux EUR vers USD (automatique)">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 px-3 py-2 rounded-xl border border-ink-200 bg-ink-100/60 text-ink-700">1 € = {(p.eurusd||0).toFixed(4)} $</div>
+            <button onClick={fetchFX} className="p-2.5 rounded-xl border border-ink-200 bg-white hover:bg-ink-100 text-ink-500 cursor-pointer" title="Actualiser"><Icon name="refresh" className="w-4 h-4"/></button></div>
+          <p className="text-xs text-ink-400 mt-1">Récupéré automatiquement{p.fxMaj?", maj "+p.fxMaj:""}. Le dollar n'est affiché qu'en information secondaire.</p></Field>
+      </div>
+    </Card>
+    <Card title="Sauvegarde sur GitHub" sub="Tes données sont enregistrées dans ton repo privé GitHub. Récupérables depuis n'importe quel appareil, jamais perdues si ton ordi lâche.">
+      <div className="grid md:grid-cols-2 gap-4">
+        <Field label="Compte GitHub"><TextInput value={gh.owner||""} onChange={v=>setG("owner",v)} placeholder="ton-pseudo-github"/></Field>
+        <Field label="Repo privé (pour les données)"><TextInput value={gh.repo||""} onChange={v=>setG("repo",v)} placeholder="snowball-data"/></Field>
+        <Field label="Fichier"><TextInput value={gh.path||""} onChange={v=>setG("path",v)} placeholder="snowball-data.json"/></Field>
+        <Field label="Jeton d'accès (fine-grained, privé)"><input type="password" value={gh.token||""} onChange={e=>setG("token",e.target.value)} placeholder="github_pat_…" className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"/></Field>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 mt-4">
+        <button onClick={sauver} disabled={busy} className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer"><Icon name="up" className="w-4 h-4"/>{busy==="save"?"Sauvegarde…":"Sauvegarder sur GitHub"}</button>
+        <button onClick={restaurer} disabled={busy} className="inline-flex items-center gap-2 bg-white border border-brand-300 text-brand-700 hover:bg-brand-50 disabled:opacity-50 px-4 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer"><Icon name="down" className="w-4 h-4"/>{busy==="load"?"Restauration…":"Restaurer depuis GitHub"}</button>
+        {gh.maj&&<span className="text-xs text-ink-400">Dernière sauvegarde : {gh.maj}</span>}
+      </div>
+      <p className="text-xs text-ink-400 mt-3">Le jeton reste sur cet appareil (jamais partagé). Crée un jeton « fine-grained » limité à ce repo, permission Contents en lecture/écriture. Sur un nouvel appareil : renseigne les mêmes champs puis « Restaurer ».</p>
+    </Card>
+    <Card title="Sauvegarde locale (fichier)" sub="En complément : un export manuel à garder chez toi.">
+      <div className="flex flex-wrap gap-3">
+        <button onClick={doExport} className="inline-flex items-center gap-2 bg-white border border-ink-200 text-ink-700 hover:bg-ink-100 px-4 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer"><Icon name="down" className="w-4 h-4"/>Exporter (JSON)</button>
+        <button onClick={()=>fileRef.current.click()} className="inline-flex items-center gap-2 bg-white border border-ink-200 text-ink-700 hover:bg-ink-100 px-4 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer"><Icon name="up" className="w-4 h-4"/>Importer (JSON)</button>
+        <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={doImport}/>
+      </div></Card>
+  </div>);
+}
+function Field({label,children}){return <div><div className="text-sm text-ink-600 mb-1">{label}</div>{children}</div>;}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

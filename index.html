@@ -75,6 +75,7 @@ const PATHS={
   target:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
   settings:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
   plus:"M12 5v14M5 12h14", x:"M18 6L6 18M6 6l12 12", check:"M20 6L9 17l-5-5",
+  home:"M3 11l9-8 9 8M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10M9 21v-6h6v6",
   down:"M12 3v12M7 10l5 5 5-5M5 21h14", up:"M12 21V9M7 14l5-5 5 5M5 3h14", refresh:"M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15",
 };
 function Icon({name,className="w-5 h-5",stroke=2}){
@@ -99,14 +100,17 @@ function defaultData(){
     mois:{ [ym]:{ revenus:[ {id:uid(),nom:"Salaire",montant:0,type:"actif"} ],
       depenses:[ {id:uid(),nom:"Loyer",montant:0},{id:uid(),nom:"Alimentation",montant:0},{id:uid(),nom:"Eau",montant:0} ] } },
     suivi:[ {id:uid(),annee:new Date().getFullYear(),brut:0,dettes:0} ],
+    biens:[],
     snapshots:{}, actionsPerso:[],
     jalons:[ {id:uid(),intitule:"Fonds d'urgence de 6 mois",categorie:"Sécurité",statut:"À faire"} ],
     projection:{ annee:new Date().getFullYear()+1, rendement:0.08, mensuel:Array.from({length:12},()=>({rev:0,dep:0})) },
   };
 }
+let CAME_FROM_STORAGE=false;
 function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.parse(s);
-  if(d&&d.params){ if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
-    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[];
+  if(d&&d.params){ CAME_FROM_STORAGE=true;
+    if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
+    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[];
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
     return d; }} }catch(e){} return defaultData(); }
 
@@ -245,9 +249,23 @@ function App(){
   const [data,setData]=useState(loadData);
   const [tab,setTab]=useState("dashboard");
   const [toast,setToast]=useState("");
+  const [gh,setGh]=useState(loadGh);
+  const [busy,setBusy]=useState("");
+  const [savedSnap,setSavedSnap]=useState("");
   const fileRef=useRef();
   useEffect(()=>{ try{localStorage.setItem(KEY,JSON.stringify(data));}catch(e){} },[data]);
-  const flash=m=>{ setToast(m); setTimeout(()=>setToast(""),2200); };
+  useEffect(()=>{ try{localStorage.setItem(GH_KEY,JSON.stringify(gh));}catch(e){} },[gh]);
+  const flash=m=>{ setToast(m); setTimeout(()=>setToast(""),2600); };
+  const ghReady=gh.token&&gh.owner&&gh.repo&&gh.path;
+  const ghSauver=async()=>{ if(!ghReady){flash("Configure GitHub dans Réglages");return;} setBusy("save");
+    try{ const cur=await ghGet(gh); await ghPut(gh,JSON.stringify(data,null,2),cur.sha); setSavedSnap(JSON.stringify(data)); setGh(s=>({...s,maj:new Date().toISOString().slice(0,16).replace("T"," ")})); flash("Sauvegardé sur GitHub"); }
+    catch(e){ flash("Échec sauvegarde : "+e.message); } setBusy(""); };
+  const ghRestaurer=async()=>{ if(!ghReady){flash("Configure GitHub dans Réglages");return;} setBusy("load");
+    try{ const cur=await ghGet(gh); if(cur&&cur.content){const d=JSON.parse(cur.content); if(d&&d.params){setData(d);setSavedSnap(JSON.stringify(d));flash("Données restaurées depuis GitHub");}else flash("Sauvegarde invalide");} else flash("Aucune sauvegarde trouvée"); }
+    catch(e){ flash("Échec restauration : "+e.message); } setBusy(""); };
+  useEffect(()=>{ setSavedSnap(JSON.stringify(data)); const g=loadGh();
+    if(!CAME_FROM_STORAGE && g.token&&g.owner&&g.repo&&g.path){ ghGet(g).then(r=>{if(r&&r.content){const d=JSON.parse(r.content); if(d&&d.params){setData(d);setSavedSnap(JSON.stringify(d));flash("Données chargées depuis GitHub");}}}).catch(()=>{}); } },[]);
+  const dirty = ghReady && savedSnap && JSON.stringify(data)!==savedSnap;
 
   /* ouverture : mois en cours */
   useEffect(()=>{ setData(d=>{ const ym=nowYM(); if(d.mois[ym]) return {...d,moisActif:ym};
@@ -291,7 +309,7 @@ function App(){
     r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.params){setData(d);flash("Données importées");} else flash("Fichier invalide"); }catch(err){flash("Erreur de lecture");} };
     r.readAsText(f); };
 
-  const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["cashflow","Cashflow","wallet"],
+  const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["immobilier","Immobilier","home"],["cashflow","Cashflow","wallet"],
     ["projection","Projection","chart"],["suivi","Suivi","trending"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
 
   return (<div className="min-h-screen">
@@ -316,14 +334,16 @@ function App(){
     <main className="max-w-6xl mx-auto px-4 py-6">
       {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab}/>}
       {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc}/>}
+      {tab==="immobilier"&&<Immobilier data={data} setData={setData}/>}
       {tab==="cashflow"&&<Cashflow data={data} setData={setData} mc={mc} setMc={setMc} moisActif={moisActif} c={c}/>}
       {tab==="projection"&&<Projection data={data} setData={setData} c={c}/>}
       {tab==="suivi"&&<Suivi data={data} setData={setData} c={c} hist={histCashflow}/>}
       {tab==="objectifs"&&<Objectifs data={data} setData={setData} c={c}/>}
-      {tab==="reglages"&&<Reglages data={data} setData={setData} setParam={setParam} doExport={doExport} fileRef={fileRef} doImport={doImport} flash={flash} fetchFX={()=>fetchFX().then(ok=>flash(ok?"Taux mis à jour":"Hors ligne, taux inchangé"))}/>}
+      {tab==="reglages"&&<Reglages data={data} setData={setData} setParam={setParam} doExport={doExport} fileRef={fileRef} doImport={doImport} flash={flash} gh={gh} setGh={setGh} busy={busy} sauver={ghSauver} restaurer={ghRestaurer} fetchFX={()=>fetchFX().then(ok=>flash(ok?"Taux mis à jour":"Hors ligne, taux inchangé"))}/>}
     </main>
-    <footer className="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-ink-400">Données enregistrées localement sur cet appareil. Pense à exporter et sauvegarder (Réglages).</footer>
-    {toast&&<div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium">{toast}</div>}
+    <footer className="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-ink-400">Données enregistrées sur cet appareil et, si configuré, sauvegardées sur GitHub (Réglages).</footer>
+    {dirty&&<button onClick={ghSauver} disabled={busy==="save"} className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-full shadow-xl text-sm font-medium cursor-pointer disabled:opacity-60"><Icon name="up" className="w-4 h-4"/>{busy==="save"?"Sauvegarde…":"Sauvegarder sur GitHub"}</button>}
+    {toast&&<div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium z-40">{toast}</div>}
   </div>);
 }
 
@@ -484,6 +504,69 @@ function Patrimoine({data,setData,c,alloc}){
         <li><b>Crédit rattaché</b> : ce que tu possèdes vraiment d'un bien, c'est sa valeur moins ce qu'il te reste à rembourser.</li>
         <li>Exemple : appartement qui vaut 220 000, qui t'a coûté 185 000, avec 150 000 de crédit. Plus-value latente 35 000, et tu en possèdes vraiment 70 000.</li>
       </ul>
+    </Card>
+  </div>);
+}
+
+/* Immobilier */
+function Immobilier({data,setData}){
+  const [open,setOpen]=useState({});
+  const biens=data.biens||[];
+  const upd=(id,p)=>setData(d=>({...d,biens:(d.biens||[]).map(b=>b.id===id?{...b,...p}:b)}));
+  const del=id=>setData(d=>({...d,biens:(d.biens||[]).filter(b=>b.id!==id)}));
+  const add=()=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),nom:"Nouveau bien",type:"Locatif",valeur:0,cout:0,loyer:0,charges:0,taxe:0,capital:0,mensualite:0,taux:0.03}]}));
+  const calc=b=>{const pv=n(b.valeur)-n(b.cout), equity=n(b.valeur)-n(b.capital);
+    const cfMois=n(b.loyer)-n(b.charges)-n(b.taxe)/12-n(b.mensualite);
+    const rdtBrut=n(b.cout)>0?n(b.loyer)*12/n(b.cout):0;
+    const rdtNet=n(b.cout)>0?(n(b.loyer)*12-n(b.charges)*12-n(b.taxe))/n(b.cout):0;
+    return {pv,equity,cfMois,rdtBrut,rdtNet};};
+  const tot=biens.reduce((s,b)=>{const cc=calc(b); s.valeur+=n(b.valeur); s.capital+=n(b.capital); s.equity+=cc.equity; s.cf+=cc.cfMois; s.pv+=cc.pv; return s;},{valeur:0,capital:0,equity:0,cf:0,pv:0});
+  const TYPES=["Locatif","Résidence principale","SCI","Secondaire"];
+  return (<div className="space-y-5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <KPI label="Valeur des biens" value={fmtE(tot.valeur)} icon="home"/>
+      <KPI label="Valeur nette" value={fmtE(tot.equity)} tone="blue"/>
+      <KPI label="Cashflow locatif" value={fmtE(tot.cf)+" / mois"} tone={tot.cf>=0?"blue":"red"}/>
+      <KPI label="Plus-value latente" value={fmtE(tot.pv)} tone={tot.pv>=0?"blue":"red"}/>
+    </div>
+    <Card title="Mes biens immobiliers" sub="Pour chaque bien : valeur, coût, loyers, charges et crédit. Le rendement, le cashflow et la plus-value se calculent." right={<AddBtn onClick={add}>Ajouter un bien</AddBtn>}>
+      {biens.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Ajoute ton premier bien immobilier.</div>}
+      <div className="space-y-3">{biens.map(b=>{const cc=calc(b); const o=open[b.id]; return(
+        <div key={b.id} className="rounded-2xl border border-ink-100">
+          <div className="flex items-center gap-2 p-2">
+            <button onClick={()=>setOpen(s=>({...s,[b.id]:!o}))} className="text-ink-300 hover:text-brand-600 w-7 h-7 rounded-lg hover:bg-ink-100 cursor-pointer shrink-0">{o?"▾":"▸"}</button>
+            <div className="flex-1 min-w-[120px]"><TextInput value={b.nom} onChange={v=>upd(b.id,{nom:v})} placeholder="Ex : appartement Lyon"/></div>
+            <select value={b.type} onChange={e=>upd(b.id,{type:e.target.value})} className="w-44 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{TYPES.map(t=><option key={t}>{t}</option>)}</select>
+            <Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})} className="w-32"/>
+            <IconBtn name="x" onClick={()=>del(b.id)} title="Supprimer"/>
+          </div>
+          {o&&<div className="px-3 pb-3 pt-2 border-t border-ink-100 space-y-4">
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Field label="Coût de revient (achat + frais + travaux)"><Money value={b.cout} onChange={v=>upd(b.id,{cout:v})}/></Field>
+              <Field label="Loyer perçu (mensuel)"><Money value={b.loyer} onChange={v=>upd(b.id,{loyer:v})}/></Field>
+              <Field label="Charges (mensuel : copro, gestion, entretien)"><Money value={b.charges} onChange={v=>upd(b.id,{charges:v})}/></Field>
+              <Field label="Taxe foncière (annuelle)"><Money value={b.taxe} onChange={v=>upd(b.id,{taxe:v})}/></Field>
+              <Field label="Crédit : mensualité"><Money value={b.mensualite} onChange={v=>upd(b.id,{mensualite:v})}/></Field>
+              <Field label="Crédit : capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <Mini label="Cashflow / mois" v={fmtE(cc.cfMois)} tone={cc.cfMois>=0?"brand":"red"}/>
+              <Mini label="Rendement brut" v={fmtP(cc.rdtBrut)}/>
+              <Mini label="Rendement net" v={fmtP(cc.rdtNet)}/>
+              <Mini label="Plus-value latente" v={fmtE(cc.pv)} tone={cc.pv>=0?"brand":"red"}/>
+              <Mini label="Valeur nette" v={fmtE(cc.equity)}/>
+            </div>
+          </div>}
+        </div>);})}</div>
+    </Card>
+    <Card title="En clair">
+      <ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
+        <li><b>Cashflow locatif</b> : loyer moins charges, taxe foncière et mensualité de crédit. Positif = le bien te rapporte chaque mois.</li>
+        <li><b>Rendement brut</b> : loyers d'un an divisés par ce que le bien t'a coûté. <b>Rendement net</b> : pareil, après charges et taxe.</li>
+        <li><b>Plus-value latente</b> : valeur actuelle moins coût de revient (gain à la revente).</li>
+        <li><b>Valeur nette</b> : valeur actuelle moins le crédit restant. C'est ta vraie part du bien.</li>
+      </ul>
+      <p className="text-xs text-ink-400 mt-3">Cet onglet est autonome pour l'instant. Prochaine étape : relier automatiquement ces biens, leurs loyers et leurs crédits au tableau de bord et au cashflow global.</p>
     </Card>
   </div>);
 }
@@ -723,19 +806,9 @@ function Objectifs({data,setData,c}){
 }
 
 /* Réglages */
-function Reglages({data,setData,setParam,doExport,fileRef,doImport,fetchFX,flash}){
+function Reglages({data,setData,setParam,doExport,fileRef,doImport,fetchFX,flash,gh,setGh,busy,sauver,restaurer}){
   const p=data.params;
-  const [gh,setGh]=useState(loadGh);
-  const [busy,setBusy]=useState("");
-  useEffect(()=>{try{localStorage.setItem(GH_KEY,JSON.stringify(gh));}catch(e){}},[gh]);
   const setG=(k,v)=>setGh(s=>({...s,[k]:v}));
-  const ok=gh.token&&gh.owner&&gh.repo&&gh.path;
-  const sauver=async()=>{ if(!ok){flash("Renseigne le compte, le repo et le jeton");return;} setBusy("save");
-    try{ const cur=await ghGet(gh); await ghPut(gh,JSON.stringify(data,null,2),cur.sha); setGh(s=>({...s,maj:new Date().toISOString().slice(0,16).replace("T"," ")})); flash("Sauvegardé sur GitHub"); }
-    catch(e){ flash("Échec sauvegarde : "+e.message); } setBusy(""); };
-  const restaurer=async()=>{ if(!ok){flash("Renseigne le compte, le repo et le jeton");return;} setBusy("load");
-    try{ const cur=await ghGet(gh); if(cur&&cur.content){ const d=JSON.parse(cur.content); if(d&&d.params){setData(d);flash("Données restaurées depuis GitHub");} else flash("Sauvegarde invalide"); } else flash("Aucune sauvegarde trouvée"); }
-    catch(e){ flash("Échec restauration : "+e.message); } setBusy(""); };
   return (<div className="space-y-5">
     <Card title="Objectif et paramètres" sub="Tout est en euros par priorité. Le taux de change se récupère automatiquement.">
       <div className="grid md:grid-cols-2 gap-4">

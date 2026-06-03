@@ -191,16 +191,26 @@ function TextInput({value,onChange,placeholder,className=""}){
   return <input className={"w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-ink-900 placeholder-ink-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition "+className}
     value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)} />;
 }
+const numStr = v => (v===0||v==null||!isFinite(v))?"":String(v);
+const pctStr = v => (v===0||v==null||!isFinite(v))?"":String(Math.round(v*1e8)/1e6);
+const parseNum = s => n(String(s).replace(/\s/g,"").replace(",","."));
 function Money({value,onChange,suffix="€",className=""}){
+  const [txt,setTxt]=useState(numStr(value)); const [foc,setFoc]=useState(false);
+  useEffect(()=>{ if(!foc) setTxt(numStr(value)); },[value,foc]);
   return (<div className={"relative "+className}>
-    <input type="number" className="num w-full text-right pr-8 pl-3 py-2 rounded-xl border border-ink-200 bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition"
-      value={value===0?"":value} placeholder="0" onChange={e=>onChange(n(e.target.value))} />
+    <input type="text" inputMode="decimal" className="num w-full text-right pr-8 pl-3 py-2 rounded-xl border border-ink-200 bg-white focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none transition"
+      value={txt} placeholder="0" onFocus={()=>setFoc(true)} onBlur={()=>setFoc(false)} onChange={e=>{const s=e.target.value; setTxt(s); onChange(parseNum(s));}} />
     <span className="absolute right-3 top-2.5 text-ink-400 text-sm pointer-events-none">{suffix}</span></div>);
 }
 function Pct({value,onChange,className=""}){
-  return (<div className={"relative "+className}><input type="number" className="num w-full text-right pr-8 pl-3 py-2 rounded-xl border border-ink-200 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-    value={value===0?"":value*100} onChange={e=>onChange(n(e.target.value)/100)}/><span className="absolute right-3 top-2.5 text-ink-400 text-sm">%</span></div>);
+  const [txt,setTxt]=useState(pctStr(value)); const [foc,setFoc]=useState(false);
+  useEffect(()=>{ if(!foc) setTxt(pctStr(value)); },[value,foc]);
+  return (<div className={"relative "+className}><input type="text" inputMode="decimal" className="num w-full text-right pr-8 pl-3 py-2 rounded-xl border border-ink-200 bg-white outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+    value={txt} placeholder="0" onFocus={()=>setFoc(true)} onBlur={()=>setFoc(false)} onChange={e=>{const s=e.target.value; setTxt(s); onChange(parseNum(s)/100);}}/><span className="absolute right-3 top-2.5 text-ink-400 text-sm">%</span></div>);
 }
+/* Champs de saisie stables (definis au niveau module pour ne jamais etre remontes) */
+function FMoney({l,k,m,set,suffix="€"}){ return <Field label={l}><Money value={m[k]||0} onChange={v=>set(k,v)} suffix={suffix}/></Field>; }
+function FPct({l,k,m,set}){ return <Field label={l}><Pct value={m[k]||0} onChange={v=>set(k,v)}/></Field>; }
 function IconBtn({name,onClick,title}){
   return <button onClick={onClick} title={title} className="text-ink-300 hover:text-red-500 hover:bg-red-50 rounded-lg p-1.5 transition cursor-pointer"><Icon name={name} className="w-4 h-4"/></button>;
 }
@@ -1049,8 +1059,6 @@ function MdbTool({data,setData}){
   const f1=bilanMdb(m,1).net, f2=bilanMdb(m,1.05).net, slope=(f2-f1)/0.05;
   const pointMort=slope>0?r.CA*(1-f1/slope):null;
   const sCAm=bilanMdb(m,0.9).net, sCAp=bilanMdb(m,1.1).net, sTrav=bilanMdb(m,1,1.1).net;
-  const E=({l,k,suffix="€"})=>(<Field label={l}><Money value={m[k]||0} onChange={v=>set(k,v)} suffix={suffix}/></Field>);
-  const P=({l,k})=>(<Field label={l}><Pct value={m[k]||0} onChange={v=>set(k,v)}/></Field>);
   return (<div className="space-y-5">
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <KPI label="Chiffre d'affaires" value={fmtE(r.CA)} icon="bank"/>
@@ -1065,7 +1073,7 @@ function MdbTool({data,setData}){
         <Field label="Bien neuf (achevé depuis moins de 5 ans) ?"><select value={m.bienNeuf?"o":"n"} onChange={e=>set("bienNeuf",e.target.value==="o")} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="n">Non (ancien)</option><option value="o">Oui (neuf)</option></select></Field>
         <Field label="Achat ayant ouvert droit à déduction (vendeur assujetti) ?"><select value={m.achatTaxe?"o":"n"} onChange={e=>set("achatTaxe",e.target.value==="o")} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="n">Non (achat à un particulier)</option><option value="o">Oui</option></select></Field>
         <Field label="Régime de TVA"><select value={m.regimeOverride||"auto"} onChange={e=>set("regimeOverride",e.target.value)} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="auto">Automatique ({REGIME_LBL[r.regime]})</option><option value="exoneration">Exonération</option><option value="marge">TVA sur marge</option><option value="total">TVA sur prix total</option></select></Field>
-        <P l="Taux de TVA" k="tauxTVA"/>
+        <FPct m={m} set={set} l="Taux de TVA" k="tauxTVA"/>
         <Field label="Société éligible à l'IS réduit 15% ?"><select value={m.isReduit?"o":"n"} onChange={e=>set("isReduit",e.target.value==="o")} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="o">Oui (CA &lt; 10 M€, capital ≥75% perso)</option><option value="n">Non (IS 25%)</option></select></Field>
       </div>
       <div className="mt-3 text-sm rounded-2xl bg-sky-50 border border-sky-200 p-3 text-sky-800"><b>Régime appliqué : {REGIME_LBL[r.regime]}.</b> {r.recup?"Les travaux sont saisis HT (TVA récupérable).":"La TVA sur les travaux n'est pas récupérable : elle est ajoutée comme coût."}</div>
@@ -1074,41 +1082,41 @@ function MdbTool({data,setData}){
     <div className="grid lg:grid-cols-2 gap-5 items-start">
       <Card title="Achat et charge foncière">
         <div className="grid sm:grid-cols-2 gap-4">
-          <E l="Prix d'acquisition" k="prixAchat"/>
-          <P l="Frais d'acquisition (% du prix)" k="fraisAcqPct"/>
-          <E l="Indemnité d'éviction" k="indemniteEviction"/>
-          <E l="Apporteur d'affaires" k="apporteur"/>
+          <FMoney m={m} set={set} l="Prix d'acquisition" k="prixAchat"/>
+          <FPct m={m} set={set} l="Frais d'acquisition (% du prix)" k="fraisAcqPct"/>
+          <FMoney m={m} set={set} l="Indemnité d'éviction" k="indemniteEviction"/>
+          <FMoney m={m} set={set} l="Apporteur d'affaires" k="apporteur"/>
         </div>
         <div className="text-sm text-ink-500 mt-3">Frais d'acquisition : {fmtE(r.fraisAcq)} · <b className="text-ink-700">Prix de revient du foncier {fmtE(r.foncier)}</b></div>
         <p className="text-xs text-ink-400 mt-1">En engagement de revendre (art. 1115), les frais tournent autour de 2 à 3%. En droit commun, ~7 à 8%.</p>
       </Card>
       <Card title="Travaux (montants HT)">
         <div className="grid sm:grid-cols-2 gap-4">
-          <E l="Gros œuvre + second œuvre" k="grosOeuvre"/>
-          <E l="Travaux neufs / extension" k="travauxNeufs"/>
-          <E l="Voirie et espaces verts" k="vrd"/>
-          <E l="Équipement / ameublement" k="equipement"/>
-          <E l="Honoraires technique (archi, BET)" k="honoTech"/>
-          <E l="Raccordement réseaux" k="raccordements"/>
-          <P l="Aléas (% des travaux)" k="aleasPct"/>
+          <FMoney m={m} set={set} l="Gros œuvre + second œuvre" k="grosOeuvre"/>
+          <FMoney m={m} set={set} l="Travaux neufs / extension" k="travauxNeufs"/>
+          <FMoney m={m} set={set} l="Voirie et espaces verts" k="vrd"/>
+          <FMoney m={m} set={set} l="Équipement / ameublement" k="equipement"/>
+          <FMoney m={m} set={set} l="Honoraires technique (archi, BET)" k="honoTech"/>
+          <FMoney m={m} set={set} l="Raccordement réseaux" k="raccordements"/>
+          <FPct m={m} set={set} l="Aléas (% des travaux)" k="aleasPct"/>
         </div>
         <div className="text-sm text-ink-500 mt-3">Aléas {fmtE(r.aleas)} · <b className="text-ink-700">Coût technique {fmtE(r.coutTechnique)}{!r.recup?" (TTC)":" (HT)"}</b></div>
       </Card>
       <Card title="Honoraires et frais divers">
         <div className="grid sm:grid-cols-2 gap-4">
-          <E l="Honoraires de gestion" k="honoGestion"/>
-          <E l="Frais de comptabilité" k="honoCompta"/>
-          <E l="Frais de justice" k="honoJustice"/>
-          <P l="Assurance dommages-ouvrage (% travaux)" k="doPct"/>
-          <P l="GFA si VEFA (% travaux)" k="gfaPct"/>
+          <FMoney m={m} set={set} l="Honoraires de gestion" k="honoGestion"/>
+          <FMoney m={m} set={set} l="Frais de comptabilité" k="honoCompta"/>
+          <FMoney m={m} set={set} l="Frais de justice" k="honoJustice"/>
+          <FPct m={m} set={set} l="Assurance dommages-ouvrage (% travaux)" k="doPct"/>
+          <FPct m={m} set={set} l="GFA si VEFA (% travaux)" k="gfaPct"/>
         </div>
       </Card>
       <Card title="Financement">
         <div className="grid sm:grid-cols-2 gap-4">
-          <E l="Apport / fonds propres" k="apport"/>
-          <E l="Montant emprunté" k="emprunt"/>
-          <P l="Taux d'intérêt annuel" k="tauxEmprunt"/>
-          <E l="Frais de dossier / garantie" k="fraisDossier"/>
+          <FMoney m={m} set={set} l="Apport / fonds propres" k="apport"/>
+          <FMoney m={m} set={set} l="Montant emprunté" k="emprunt"/>
+          <FPct m={m} set={set} l="Taux d'intérêt annuel" k="tauxEmprunt"/>
+          <FMoney m={m} set={set} l="Frais de dossier / garantie" k="fraisDossier"/>
         </div>
         <div className="text-sm text-ink-500 mt-3">Frais financiers estimés : <b className="text-ink-700">{fmtE(r.fraisFin)}</b> <span className="text-ink-400">(emprunt × taux × durée + frais de dossier)</span></div>
       </Card>
@@ -1118,7 +1126,7 @@ function MdbTool({data,setData}){
         <div className="flex-1"><TextInput value={l.nom} onChange={v=>updLot(l.id,{nom:v})} placeholder="Lot (studio, local…)"/></div>
         <Money value={l.prix} onChange={v=>updLot(l.id,{prix:v})} className="w-36"/>
         <IconBtn name="x" onClick={()=>delLot(l.id)}/></div>))}</div>
-      <div className="grid sm:grid-cols-2 gap-4 mt-3"><P l="Honoraires de vente (% du CA)" k="honoVentePct"/></div>
+      <div className="grid sm:grid-cols-2 gap-4 mt-3"><FPct m={m} set={set} l="Honoraires de vente (% du CA)" k="honoVentePct"/></div>
       <div className="flex justify-between mt-3 pt-3 border-t border-ink-200"><span className="font-heading font-semibold text-ink-700">Chiffre d'affaires</span><span className="font-heading font-bold text-brand-700">{fmtE(r.CA)}</span></div>
     </Card>
     <Card title="Détail du calcul" sub="Du chiffre d'affaires au bénéfice net, ligne par ligne.">
@@ -1218,8 +1226,6 @@ function LocatifTool({data,setData}){
   const m=data.outilLocatif||{};
   const set=(k,v)=>setData(d=>({...d,outilLocatif:{...(d.outilLocatif||{}),[k]:v}}));
   const r=bilanLocatif(m);
-  const E=({l,k,suffix="€"})=>(<Field label={l}><Money value={m[k]||0} onChange={v=>set(k,v)} suffix={suffix}/></Field>);
-  const P=({l,k})=>(<Field label={l}><Pct value={m[k]||0} onChange={v=>set(k,v)}/></Field>);
   const verdict = r.cashflowMois>=0&&r.netnet>=0.035 ? {t:"Bonne opération",c:"text-brand-700",d:"Cashflow positif et rendement net-net solide."}
     : r.cashflowMois>=-150 ? {t:"Opération équilibrée",c:"text-sky-700",d:"Effort d'épargne modéré, le bien s'autofinance presque."}
     : {t:"Effort d'épargne important",c:"text-amber-700",d:"Le bien coûte chaque mois ; à réserver à une forte conviction patrimoniale."};
@@ -1233,11 +1239,11 @@ function LocatifTool({data,setData}){
     <Controleur checks={locatifChecks(m,r)}/>
     <Card title="Le bien et son acquisition">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <E l="Prix d'achat" k="prix"/>
-        <P l="Frais de notaire (% du prix)" k="notairePct"/>
-        <E l="Travaux" k="travaux"/>
-        <E l="Frais d'agence" k="fraisAgence"/>
-        <E l="Mobilier (si meublé)" k="mobilier"/>
+        <FMoney m={m} set={set} l="Prix d'achat" k="prix"/>
+        <FPct m={m} set={set} l="Frais de notaire (% du prix)" k="notairePct"/>
+        <FMoney m={m} set={set} l="Travaux" k="travaux"/>
+        <FMoney m={m} set={set} l="Frais d'agence" k="fraisAgence"/>
+        <FMoney m={m} set={set} l="Mobilier (si meublé)" k="mobilier"/>
       </div>
       <div className="text-sm text-ink-500 mt-3">Frais de notaire {fmtE(r.notaire)} · <b className="text-ink-700">Coût total d'acquisition {fmtE(r.coutTotal)}</b></div>
       <p className="text-xs text-ink-400 mt-1">Notaire : environ 7 à 8% dans l'ancien, 2 à 3% dans le neuf.</p>
@@ -1245,24 +1251,24 @@ function LocatifTool({data,setData}){
     <div className="grid lg:grid-cols-2 gap-5 items-start">
       <Card title="Loyer et charges">
         <div className="grid sm:grid-cols-2 gap-4">
-          <E l="Loyer mensuel (hors charges)" k="loyerMensuel"/>
-          <P l="Vacance et impayés (% du loyer)" k="vacancePct"/>
-          <E l="Taxe foncière (par an)" k="taxeFonciere"/>
-          <E l="Charges de copropriété (par an)" k="coproAn"/>
-          <E l="Assurance PNO (par an)" k="assurancePNO"/>
-          <E l="Comptable (par an)" k="comptaAn"/>
-          <P l="Gestion locative (% du loyer)" k="gestionPct"/>
-          <P l="Assurance loyers impayés (% du loyer)" k="gliPct"/>
+          <FMoney m={m} set={set} l="Loyer mensuel (hors charges)" k="loyerMensuel"/>
+          <FPct m={m} set={set} l="Vacance et impayés (% du loyer)" k="vacancePct"/>
+          <FMoney m={m} set={set} l="Taxe foncière (par an)" k="taxeFonciere"/>
+          <FMoney m={m} set={set} l="Charges de copropriété (par an)" k="coproAn"/>
+          <FMoney m={m} set={set} l="Assurance PNO (par an)" k="assurancePNO"/>
+          <FMoney m={m} set={set} l="Comptable (par an)" k="comptaAn"/>
+          <FPct m={m} set={set} l="Gestion locative (% du loyer)" k="gestionPct"/>
+          <FPct m={m} set={set} l="Assurance loyers impayés (% du loyer)" k="gliPct"/>
         </div>
         <div className="text-sm text-ink-500 mt-3">Charges non récupérables : <b className="text-ink-700">{fmtE(r.charges)} / an</b></div>
       </Card>
       <Card title="Financement">
         <div className="grid sm:grid-cols-2 gap-4">
-          <E l="Apport / fonds propres" k="apport"/>
-          <E l="Montant emprunté" k="emprunt"/>
-          <P l="Taux d'intérêt annuel" k="tauxEmprunt"/>
-          <P l="Assurance emprunteur (% par an)" k="assEmprunteurPct"/>
-          <E l="Durée du prêt" k="dureeAnnees" suffix="ans"/>
+          <FMoney m={m} set={set} l="Apport / fonds propres" k="apport"/>
+          <FMoney m={m} set={set} l="Montant emprunté" k="emprunt"/>
+          <FPct m={m} set={set} l="Taux d'intérêt annuel" k="tauxEmprunt"/>
+          <FPct m={m} set={set} l="Assurance emprunteur (% par an)" k="assEmprunteurPct"/>
+          <FMoney m={m} set={set} l="Durée du prêt" k="dureeAnnees" suffix="ans"/>
         </div>
         <div className="text-sm text-ink-500 mt-3">Mensualité crédit + assurance : <b className="text-ink-700">{fmtE(r.mensualiteTot)} / mois</b> <span className="text-ink-400">dont {fmtE(r.capital1/12)} de capital la 1re année</span></div>
       </Card>

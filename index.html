@@ -1507,7 +1507,7 @@ function Projection({data,setData,c}){
   const setM=(i,k,v)=>setPr({mensuel:mensuel.map((x,j)=>j===i?{...x,[k]:v}:x)});
   const prefill=()=>setPr({mensuel:mensuel.map(()=>({rev:Math.round(c.revT),dep:Math.round(c.depT)}))});
   const totRev=sum(mensuel,x=>x.rev), totDep=sum(mensuel,x=>x.dep), totCF=totRev-totDep;
-  const start=c.net, plusValue=start*rdt, netFin=start+totCF+plusValue;
+  const start=c.dispo, plusValue=start*rdt, netFin=start+totCF+plusValue;
   const cum=[]; let acc=start; mensuel.forEach(x=>{acc+=n(x.rev)-n(x.dep); cum.push(acc);});
   const presets=[["Prudent",0.04],["Base",0.08],["Ambitieux",0.15]];
   const scen=[["Prudent",0.04,"#94a3b8"],["Base",0.08,"#0284c7"],["Ambitieux",0.15,"#38bdf8"]];
@@ -1518,7 +1518,7 @@ function Projection({data,setData,c}){
   else if(hitAnnee) tips.push({tone:"good",titre:"Objectif atteignable",txt:"au rythme « Base » (8%), tu atteins ton objectif en "+hitAnnee+". Augmenter l'apport ou le rendement le rapproche encore."});
   else tips.push({tone:"info",titre:"Objectif lointain",txt:"avec ces hypothèses, l'objectif n'est pas atteint sous 15 ans. Augmente l'apport mensuel ou vise un meilleur rendement."});
   return (<div className="space-y-5">
-    <div className="rounded-2xl bg-sky-50 border border-sky-200 p-3 text-sm text-sky-800">Point de départ : ton <b>patrimoine net actuel</b> de <b>{fmtE(start)}</b> (valeur de marché, immobilier inclus). La projection le fait grossir avec ton épargne planifiée ci-dessous (revenus − dépenses) et le rendement choisi.</div>
+    <div className="rounded-2xl bg-sky-50 border border-sky-200 p-3 text-sm text-sky-800">Cette projection part de ton <b>disponible actuel</b> (ton capital mobilisable, hors résidence) : <b>{fmtE(start)}</b>. Il grossit avec ton <b>épargne {annee}</b> (le solde du plan ci-dessous) et le <b>rendement</b> de tes placements. Ta résidence n'entre pas ici (elle ne se nourrit pas de ton épargne).</div>
     <Card title={"Plan mensuel "+annee} sub="Prévois ton salaire et tes dépenses mois par mois. Le solde (revenus − dépenses) est l'épargne réinvestie chaque mois.">
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="flex items-center gap-1">
@@ -1543,14 +1543,17 @@ function Projection({data,setData,c}){
     </Card>
     <div className="grid sm:grid-cols-4 gap-3">
       <div className="card rounded-3xl p-4 text-white" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
-        <div className="text-brand-50 text-xs">Patrimoine net fin {annee}</div><div className="font-heading text-2xl font-bold">{fmtE(netFin)}</div>
+        <div className="text-brand-50 text-xs">Disponible fin {annee}</div><div className="font-heading text-2xl font-bold">{fmtE(netFin)}</div>
         <div className="text-brand-100 text-xs mt-0.5">+{fmtE(netFin-start)} sur l'année</div></div>
-      <Mini label={"Apports cumulés "+annee} v={fmtE(totCF)}/>
-      <Mini label={"Plus-value estimée ("+fmtP(rdt)+")"} v={fmtE(plusValue)}/>
-      <Mini label="Objectif atteint" v={fmtP(netFin/c.objEUR)}/>
+      <Mini label={"Disponible actuel"} v={fmtE(start)}/>
+      <Mini label={"+ Épargne "+annee} v={fmtE(totCF)} tone={totCF>=0?"brand":"red"}/>
+      <Mini label={"+ Rendement ("+fmtP(rdt)+")"} v={fmtE(plusValue)}/>
     </div>
-    <Card title="Trajectoire du patrimoine net sur l'année" sub="Évolution mois par mois selon ton plan ci-dessus">
-      <LineChart labels={["déb.",...MOIS.map(m=>m.slice(0,3))]} series={[{name:"Net",color:BLUE,points:[start,...cum],fill:true}]} height={220}/>
+    <div className="rounded-2xl bg-ink-100/70 p-3 text-sm text-ink-600 text-center">
+      Disponible actuel <b className="text-ink-800">{fmtE(start)}</b> + épargne {annee} <b className="text-ink-800">{fmtE(totCF)}</b> + rendement <b className="text-ink-800">{fmtE(plusValue)}</b> = <b className="text-brand-700">{fmtE(netFin)}</b> fin {annee} <span className="text-ink-400">({fmtP(netFin/c.objEUR)} de ton objectif)</span>
+    </div>
+    <Card title="Trajectoire du disponible sur l'année" sub="Évolution mois par mois selon ton plan ci-dessus">
+      <LineChart labels={["déb.",...MOIS.map(m=>m.slice(0,3))]} series={[{name:"Disponible",color:BLUE,points:[start,...cum],fill:true}]} height={220}/>
     </Card>
     <Card title="Trajectoire vers l'objectif" sub={hitAnnee?("Au rythme « Base », objectif atteint en "+hitAnnee):"Augmente l'apport ou le rendement pour atteindre l'objectif sous 15 ans"}>
       <LineChart labels={[String(annee-1),...trajs[1].points.map(p=>String(annee-1+p.i))]}

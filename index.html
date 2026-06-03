@@ -82,6 +82,7 @@ const PATHS={
   settings:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H2a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H8a1.65 1.65 0 0 0 1-1.51V2a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V8a1.65 1.65 0 0 0 1.51 1H22a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
   plus:"M12 5v14M5 12h14", x:"M18 6L6 18M6 6l12 12", check:"M20 6L9 17l-5-5",
   home:"M3 11l9-8 9 8M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10M9 21v-6h6v6",
+  wrench:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
   down:"M12 3v12M7 10l5 5 5-5M5 21h14", up:"M12 21V9M7 14l5-5 5 5M5 3h14", refresh:"M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15",
 };
 function Icon({name,className="w-5 h-5",stroke=2}){
@@ -110,6 +111,11 @@ function defaultData(){
     snapshots:{}, actionsPerso:[], routine:{},
     jalons:[ {id:uid(),intitule:"Fonds d'urgence de 6 mois",categorie:"Sécurité",statut:"À faire"} ],
     projection:{ annee:new Date().getFullYear()+1, rendement:0.08, mensuel:Array.from({length:12},()=>({rev:0,dep:0})) },
+    outilMdb:{ bienNeuf:false, achatTaxe:false, regimeOverride:"auto", tauxTVA:0.2, isReduit:true, dureeMois:12,
+      prixAchat:0, fraisAcqPct:0.025, indemniteEviction:0, apporteur:0,
+      vrd:0, grosOeuvre:0, travauxNeufs:0, equipement:0, honoTech:0, raccordements:0, aleasPct:0.06,
+      honoGestion:0, honoCompta:0, honoJustice:0, doPct:0, gfaPct:0,
+      apport:0, emprunt:0, tauxEmprunt:0.07, fraisDossier:0, honoVentePct:0.04, lots:[{id:uid(),nom:"Lot 1",prix:0}] },
   };
 }
 let CAME_FROM_STORAGE=false;
@@ -117,6 +123,7 @@ function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.
   if(d&&d.params){ CAME_FROM_STORAGE=true;
     if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
     if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[]; if(!d.bourse)d.bourse=[]; if(!d.routine)d.routine={};
+    if(!d.outilMdb)d.outilMdb={bienNeuf:false,achatTaxe:false,regimeOverride:"auto",tauxTVA:0.2,isReduit:true,dureeMois:12,prixAchat:0,fraisAcqPct:0.025,indemniteEviction:0,apporteur:0,vrd:0,grosOeuvre:0,travauxNeufs:0,equipement:0,honoTech:0,raccordements:0,aleasPct:0.06,honoGestion:0,honoCompta:0,honoJustice:0,doPct:0,gfaPct:0,apport:0,emprunt:0,tauxEmprunt:0.07,fraisDossier:0,honoVentePct:0.04,lots:[{id:uid(),nom:"Lot 1",prix:0}]};
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
     return d; }} }catch(e){} return defaultData(); }
 
@@ -339,7 +346,7 @@ function App(){
     r.readAsText(f); };
 
   const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["cashflow","Cashflow","wallet"],
-    ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
+    ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],["outils","Outils","wrench"],["reglages","Réglages","settings"]];
 
   return (<div className="min-h-screen">
     <header className="max-w-6xl mx-auto px-4 pt-6 pb-2">
@@ -367,6 +374,7 @@ function App(){
       {tab==="projection"&&<Projection data={data} setData={setData} c={c}/>}
       {tab==="suivi"&&<Suivi data={data} setData={setData} c={c} hist={histCashflow}/>}
       {tab==="objectifs"&&<Objectifs data={data} setData={setData} c={c}/>}
+      {tab==="outils"&&<Outils data={data} setData={setData}/>}
       {tab==="reglages"&&<Reglages data={data} setData={setData} setParam={setParam} doExport={doExport} fileRef={fileRef} doImport={doImport} flash={flash} gh={gh} setGh={setGh} busy={busy} sauver={ghSauver} restaurer={ghRestaurer} fetchFX={()=>fetchFX().then(ok=>flash(ok?"Taux mis à jour":"Hors ligne, taux inchangé"))}/>}
     </main>
     <footer className="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-ink-400">Données enregistrées sur cet appareil et, si configuré, sauvegardées sur GitHub (Réglages).</footer>
@@ -905,6 +913,144 @@ function Bourse({data,setData}){
     </Card>
     <Conseils items={tips}/>
     <p className="text-xs text-ink-400 px-1">Cette valeur et ces dividendes sont déjà comptés dans ton patrimoine net et tes revenus passifs. Prochaines étapes : suivi des apports et de la performance dans le temps.</p>
+  </div>);
+}
+
+/* Outils : calculateur d'opération marchand de biens */
+function bilanMdb(m, caMult, travMult){
+  m=m||{}; caMult=caMult||1; travMult=travMult||1;
+  const tva=n(m.tauxTVA)||0.2;
+  const regime=(m.regimeOverride&&m.regimeOverride!=="auto")?m.regimeOverride:(m.bienNeuf?"total":(m.achatTaxe?"exoneration":"marge"));
+  const recup=regime==="total";
+  const fraisAcq=n(m.prixAchat)*n(m.fraisAcqPct);
+  const foncier=n(m.prixAchat)+n(m.indemniteEviction)+fraisAcq+n(m.apporteur);
+  const travauxBrut=(n(m.vrd)+n(m.grosOeuvre)+n(m.travauxNeufs)+n(m.equipement)+n(m.honoTech)+n(m.raccordements))*travMult;
+  const aleas=travauxBrut*n(m.aleasPct);
+  const techniqueHT=travauxBrut+aleas;
+  const honoDivers=n(m.honoGestion)+n(m.honoCompta)+n(m.honoJustice);
+  const diversHorsTVA=travauxBrut*(n(m.doPct)+n(m.gfaPct));
+  const CA=sum(m.lots||[],l=>l.prix)*caMult;
+  const honoVente=CA*n(m.honoVentePct);
+  const fraisFin=n(m.emprunt)*n(m.tauxEmprunt)*(n(m.dureeMois)/12)+n(m.fraisDossier);
+  const coef=recup?1:(1+tva);
+  const coutTechnique=techniqueHT*coef, coutHonoDivers=honoDivers*coef;
+  const coutHonoVente=recup?honoVente/(1+tva):honoVente;
+  const caRef=recup?CA/(1+tva):CA;
+  const margeTTC=CA-foncier;
+  const tvaMarge=regime==="marge"?Math.max(0,margeTTC)*tva/(1+tva):0;
+  const coutTotal=foncier+coutTechnique+coutHonoDivers+diversHorsTVA+fraisFin+coutHonoVente+tvaMarge;
+  const resultat=caRef-coutTotal;
+  const is=resultat<=0?0:(m.isReduit?0.15*Math.min(resultat,42500)+0.25*Math.max(0,resultat-42500):0.25*resultat);
+  const net=resultat-is;
+  return {regime,recup,fraisAcq,foncier,travauxBrut,aleas,techniqueHT,coutTechnique,honoDivers,diversHorsTVA,CA,honoVente,fraisFin,margeTTC,tvaMarge,coutRevient:foncier+coutTechnique+coutHonoDivers+diversHorsTVA,coutTotal,resultat,is,net,
+    margeCA:CA?net/CA:0, roe:n(m.apport)?net/n(m.apport):null, rentAn:(n(m.apport)&&n(m.dureeMois))?(net/n(m.apport))*12/n(m.dureeMois):null};
+}
+const REGIME_LBL={total:"TVA sur le prix total",exoneration:"Exonération de TVA",marge:"TVA sur marge"};
+function Outils({data,setData}){
+  const m=data.outilMdb||{};
+  const set=(k,v)=>setData(d=>({...d,outilMdb:{...(d.outilMdb||{}),[k]:v}}));
+  const updLot=(id,p)=>set("lots",(m.lots||[]).map(l=>l.id===id?{...l,...p}:l));
+  const addLot=()=>set("lots",[...(m.lots||[]),{id:uid(),nom:"Lot",prix:0}]);
+  const delLot=id=>set("lots",(m.lots||[]).filter(l=>l.id!==id));
+  const r=bilanMdb(m);
+  const f1=bilanMdb(m,1).net, f2=bilanMdb(m,1.05).net, slope=(f2-f1)/0.05;
+  const pointMort=slope>0?r.CA*(1-f1/slope):null;
+  const sCAm=bilanMdb(m,0.9).net, sCAp=bilanMdb(m,1.1).net, sTrav=bilanMdb(m,1,1.1).net;
+  const E=({l,k,suffix="€"})=>(<Field label={l}><Money value={m[k]||0} onChange={v=>set(k,v)} suffix={suffix}/></Field>);
+  const P=({l,k})=>(<Field label={l}><Pct value={m[k]||0} onChange={v=>set(k,v)}/></Field>);
+  return (<div className="space-y-5">
+    <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit"><button className="px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow cursor-default">Calculateur marchand de biens</button></div>
+    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <KPI label="Chiffre d'affaires" value={fmtE(r.CA)} icon="wrench"/>
+      <KPI label="Coût de revient total" value={fmtE(r.coutTotal)} tone="red"/>
+      <KPI label="Bénéfice net (après IS)" value={fmtE(r.net)} tone={r.net>=0?"blue":"red"}/>
+      <KPI label="Rentabilité / fonds propres" value={r.roe==null?"n.d.":fmtP(r.roe)} tone="blue"/>
+    </div>
+    <Card title="Paramètres de l'opération" sub="Le régime de TVA découle de la nature du bien et de l'achat (modifiable).">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Field label="Durée de portage (mois)"><Money value={m.dureeMois||0} onChange={v=>set("dureeMois",v)} suffix="m"/></Field>
+        <Field label="Bien neuf (achevé depuis moins de 5 ans) ?"><select value={m.bienNeuf?"o":"n"} onChange={e=>set("bienNeuf",e.target.value==="o")} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="n">Non (ancien)</option><option value="o">Oui (neuf)</option></select></Field>
+        <Field label="Achat ayant ouvert droit à déduction (vendeur assujetti) ?"><select value={m.achatTaxe?"o":"n"} onChange={e=>set("achatTaxe",e.target.value==="o")} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="n">Non (achat à un particulier)</option><option value="o">Oui</option></select></Field>
+        <Field label="Régime de TVA"><select value={m.regimeOverride||"auto"} onChange={e=>set("regimeOverride",e.target.value)} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="auto">Automatique ({REGIME_LBL[r.regime]})</option><option value="exoneration">Exonération</option><option value="marge">TVA sur marge</option><option value="total">TVA sur prix total</option></select></Field>
+        <P l="Taux de TVA" k="tauxTVA"/>
+        <Field label="Société éligible à l'IS réduit 15% ?"><select value={m.isReduit?"o":"n"} onChange={e=>set("isReduit",e.target.value==="o")} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm"><option value="o">Oui (CA &lt; 10 M€, capital ≥75% perso)</option><option value="n">Non (IS 25%)</option></select></Field>
+      </div>
+      <div className="mt-3 text-sm rounded-2xl bg-sky-50 border border-sky-200 p-3 text-sky-800"><b>Régime appliqué : {REGIME_LBL[r.regime]}.</b> {r.recup?"Les travaux sont saisis HT (TVA récupérable).":"La TVA sur les travaux n'est pas récupérable : elle est ajoutée comme coût."}</div>
+      {r.regime==="marge"&&<div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">Attention : la TVA sur marge peut être refusée en cas de division parcellaire (le bien vendu doit être identique au bien acheté).</div>}
+    </Card>
+    <div className="grid lg:grid-cols-2 gap-5 items-start">
+      <Card title="Achat et charge foncière">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <E l="Prix d'acquisition" k="prixAchat"/>
+          <P l="Frais d'acquisition (% du prix)" k="fraisAcqPct"/>
+          <E l="Indemnité d'éviction" k="indemniteEviction"/>
+          <E l="Apporteur d'affaires" k="apporteur"/>
+        </div>
+        <div className="text-sm text-ink-500 mt-3">Frais d'acquisition : {fmtE(r.fraisAcq)} · <b className="text-ink-700">Prix de revient du foncier {fmtE(r.foncier)}</b></div>
+        <p className="text-xs text-ink-400 mt-1">En engagement de revendre (art. 1115), les frais tournent autour de 2 à 3%. En droit commun, ~7 à 8%.</p>
+      </Card>
+      <Card title="Travaux (montants HT)">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <E l="Gros œuvre + second œuvre" k="grosOeuvre"/>
+          <E l="Travaux neufs / extension" k="travauxNeufs"/>
+          <E l="Voirie et espaces verts" k="vrd"/>
+          <E l="Équipement / ameublement" k="equipement"/>
+          <E l="Honoraires technique (archi, BET)" k="honoTech"/>
+          <E l="Raccordement réseaux" k="raccordements"/>
+          <P l="Aléas (% des travaux)" k="aleasPct"/>
+        </div>
+        <div className="text-sm text-ink-500 mt-3">Aléas {fmtE(r.aleas)} · <b className="text-ink-700">Coût technique {fmtE(r.coutTechnique)}{!r.recup?" (TTC)":" (HT)"}</b></div>
+      </Card>
+      <Card title="Honoraires et frais divers">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <E l="Honoraires de gestion" k="honoGestion"/>
+          <E l="Frais de comptabilité" k="honoCompta"/>
+          <E l="Frais de justice" k="honoJustice"/>
+          <P l="Assurance dommages-ouvrage (% travaux)" k="doPct"/>
+          <P l="GFA si VEFA (% travaux)" k="gfaPct"/>
+        </div>
+      </Card>
+      <Card title="Financement">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <E l="Apport / fonds propres" k="apport"/>
+          <E l="Montant emprunté" k="emprunt"/>
+          <P l="Taux d'intérêt annuel" k="tauxEmprunt"/>
+          <E l="Frais de dossier / garantie" k="fraisDossier"/>
+        </div>
+        <div className="text-sm text-ink-500 mt-3">Frais financiers estimés : <b className="text-ink-700">{fmtE(r.fraisFin)}</b> <span className="text-ink-400">(emprunt × taux × durée + frais de dossier)</span></div>
+      </Card>
+    </div>
+    <Card title="Ventes" sub="Le prix de revente est le levier n°1 du résultat." right={<AddBtn onClick={addLot}>Ajouter un lot</AddBtn>}>
+      <div className="space-y-2">{(m.lots||[]).map(l=>(<div key={l.id} className="flex items-center gap-2">
+        <div className="flex-1"><TextInput value={l.nom} onChange={v=>updLot(l.id,{nom:v})} placeholder="Lot (studio, local…)"/></div>
+        <Money value={l.prix} onChange={v=>updLot(l.id,{prix:v})} className="w-36"/>
+        <IconBtn name="x" onClick={()=>delLot(l.id)}/></div>))}</div>
+      <div className="grid sm:grid-cols-2 gap-4 mt-3"><P l="Honoraires de vente (% du CA)" k="honoVentePct"/></div>
+      <div className="flex justify-between mt-3 pt-3 border-t border-ink-200"><span className="font-heading font-semibold text-ink-700">Chiffre d'affaires</span><span className="font-heading font-bold text-brand-700">{fmtE(r.CA)}</span></div>
+    </Card>
+    <Card title="Résultat de l'opération">
+      <div className="grid sm:grid-cols-2 gap-3 text-sm">
+        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Chiffre d'affaires</span><b>{fmtE(r.CA)}</b></div>
+        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Coût de revient total</span><b className="text-red-500">{fmtE(r.coutTotal)}</b></div>
+        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Marge brute (CA − acquisition)</span><b>{fmtE(r.margeTTC)}</b></div>
+        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">TVA due {r.regime==="marge"?"(sur marge)":""}</span><b>{fmtE(r.tvaMarge)}</b></div>
+        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Résultat avant impôt</span><b>{fmtE(r.resultat)}</b></div>
+        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Impôt sur les sociétés</span><b className="text-red-500">{fmtE(r.is)}</b></div>
+      </div>
+      <div className="mt-3 rounded-2xl p-4 text-white flex flex-wrap items-center justify-between gap-3" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+        <div><div className="text-brand-50 text-sm">Bénéfice net (après IS)</div><div className="font-heading text-3xl font-bold">{fmtE(r.net)}</div></div>
+        <div className="text-right text-sm"><div>Marge nette / CA : <b>{fmtP(r.margeCA)}</b></div><div>Rentabilité fonds propres : <b>{r.roe==null?"n.d.":fmtP(r.roe)}</b></div><div>Rentabilité annualisée : <b>{r.rentAn==null?"n.d.":fmtP(r.rentAn)}</b></div></div>
+      </div>
+    </Card>
+    <Card title="Décision : marges de sécurité">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Mini label="Point mort (prix de revente)" v={pointMort==null?"n.d.":fmtE(pointMort)}/>
+        <Mini label="Bénéfice si revente −10%" v={fmtE(sCAm)} tone={sCAm>=0?"brand":"red"}/>
+        <Mini label="Bénéfice si revente +10%" v={fmtE(sCAp)} tone={sCAp>=0?"brand":"red"}/>
+        <Mini label="Bénéfice si travaux +10%" v={fmtE(sTrav)} tone={sTrav>=0?"brand":"red"}/>
+      </div>
+      <p className="text-xs text-ink-400 mt-3">Repère : viser une marge nette d'au moins 8 à 12% du CA et garder de la marge si le prix de revente baisse ou si les travaux dérapent. La durée de portage pèse sur les frais financiers.</p>
+    </Card>
   </div>);
 }
 

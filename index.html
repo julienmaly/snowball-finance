@@ -343,7 +343,8 @@ function App(){
     const depT=depCourante+mensuCredits, cash=sum(data.patrimoine.filter(a=>a.classe==="Liquidités"),a=>a.montant);
     const cashflow=(revTman-depT)+immoCf+bourseDiv, eur=data.params.eurusd||1.08, objEUR=data.params.objectifEUR||1000000;
     const pvFin=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"), a=>n(a.montant)-n(a.prixRevient));
-    const pvImmo=sum(immoBiens.filter(b=>coutRevient(b)>0), b=>n(b.valeur)-coutRevient(b));
+    const detteLiee=bid=>sum((data.dettes||[]).filter(x=>x.bienLie===bid), x=>x.montant);
+    const pvImmo=sum(immoBiens.filter(b=>coutRevient(b)>0), b=>n(b.valeur)-coutRevient(b)-detteLiee(b.id));
     const pvBourse=sum(bourse.filter(x=>n(x.investi)>0), x=>n(x.valeur)-n(x.investi));
     const pvLatente=pvFin+pvImmo+pvBourse;
     const netSur=net-pvLatente;
@@ -422,7 +423,7 @@ function App(){
       {tab==="reglages"&&<Reglages data={data} setData={setData} setParam={setParam} doExport={doExport} fileRef={fileRef} doImport={doImport} flash={flash} gh={gh} setGh={setGh} busy={busy} sauver={ghSauver} restaurer={ghRestaurer} fetchFX={()=>fetchFX().then(ok=>flash(ok?"Taux mis à jour":"Hors ligne, taux inchangé"))}/>}
     </main>
     <footer className="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-ink-400">Données enregistrées sur cet appareil et, si configuré, sauvegardées sur GitHub (Réglages).</footer>
-    {wizard&&<AssistantGuide data={data} setData={setData} onClose={()=>setWizard(false)}/>}
+    {wizard&&<AssistantGuide data={data} setData={setData} onClose={()=>setWizard(false)} go={t=>{setWizard(false);setTab(t);}}/>}
     {dirty&&!wizard&&<button onClick={ghSauver} disabled={busy==="save"} className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2.5 rounded-full shadow-xl text-sm font-medium cursor-pointer disabled:opacity-60"><Icon name="up" className="w-4 h-4"/>{busy==="save"?"Sauvegarde…":"Sauvegarder sur GitHub"}</button>}
     {toast&&<div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white px-5 py-2.5 rounded-full shadow-xl text-sm font-medium z-40">{toast}</div>}
   </div>);
@@ -641,7 +642,7 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj,openAssistant}){
 }
 
 /* Patrimoine */
-function AssistantGuide({data,setData,onClose}){
+function AssistantGuide({data,setData,onClose,go}){
   const [e,setE]=useState(0);
   const addAsset=(nom,classe)=>setData(d=>({...d,patrimoine:[...d.patrimoine,{id:uid(),nom,etablissement:"",pays:"",montant:0,prixRevient:0,classe}]}));
   const updA=(id,p)=>setData(d=>({...d,patrimoine:d.patrimoine.map(a=>a.id===id?{...a,...p}:a)}));
@@ -652,7 +653,7 @@ function AssistantGuide({data,setData,onClose}){
   const addBo=(nom,type)=>setData(d=>({...d,bourse:[...(d.bourse||[]),{id:uid(),nom,type,investi:0,valeur:0,dividendes:0}]}));
   const updBo=(id,p)=>setData(d=>({...d,bourse:(d.bourse||[]).map(x=>x.id===id?{...x,...p}:x)}));
   const delBo=id=>setData(d=>({...d,bourse:(d.bourse||[]).filter(x=>x.id!==id)}));
-  const addCr=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"",type:"credit",montant:0,mensualite:0,taux:0.03,actifLie:""}]}));
+  const addCr=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"",type:"credit",montant:0,mensualite:0,taux:0.03,actifLie:"",bienLie:""}]}));
   const updCr=(id,p)=>setData(d=>({...d,dettes:d.dettes.map(x=>x.id===id?{...x,...p}:x)}));
   const delCr=id=>setData(d=>({...d,dettes:d.dettes.filter(x=>x.id!==id)}));
   const setP=(k,v)=>setData(d=>({...d,params:{...d.params,[k]:v}}));
@@ -711,9 +712,11 @@ function AssistantGuide({data,setData,onClose}){
             <Money value={x.montant} onChange={v=>updCr(x.id,{montant:v})} className="w-28"/>
             <IconBtn name="x" onClick={()=>delCr(x.id)}/></div>);})}</div></div>}
         {e===5&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes revenus de {moisLong(ym)}. À renseigner de préférence en fin de mois, une fois le salaire reçu.</div><Chips options={SUGG_REV.map(([label,type])=>({label,has:dejaR.has(label.toLowerCase()),add:()=>addRev(label,type)}))}/>
-          <div className="space-y-2">{mc.revenus.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updRev(x.id,{nom:v})} placeholder="Revenu"/></div><select value={x.type} onChange={ev=>updRev(x.id,{type:ev.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="actif">actif</option><option value="passif">passif</option></select><Money value={x.montant} onChange={v=>updRev(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delRev(x.id)}/></div>))}</div></div>}
-        {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes dépenses récurrentes (celles qui reviennent chaque mois). C'est le levier de ton taux d'épargne.</div><Chips options={SUGG_DEP.map(([label,cat])=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label,cat)}))}/>
-          <div className="space-y-2">{mc.depenses.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updDep(x.id,{nom:v})} placeholder="Dépense"/></div><Money value={x.montant} onChange={v=>updDep(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delDep(x.id)}/></div>))}</div></div>}
+          <div className="space-y-2">{mc.revenus.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updRev(x.id,{nom:v})} placeholder="Revenu"/></div><select value={x.type} onChange={ev=>updRev(x.id,{type:ev.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="actif">actif</option><option value="passif">passif</option></select><Money value={x.montant} onChange={v=>updRev(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delRev(x.id)}/></div>))}</div>
+          <button onClick={()=>go&&go("cashflow")} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-3 py-2 rounded-xl transition cursor-pointer">Gérer mes revenus en détail dans le Cashflow <Icon name="trending" className="w-4 h-4"/></button></div>}
+        {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Ajoute vite tes dépenses récurrentes. Pour les classer fixe / variable, voir leur poids dans tes revenus et le détail, gère-les dans le Cashflow.</div><Chips options={SUGG_DEP.map(([label,cat])=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label,cat)}))}/>
+          <div className="space-y-2">{mc.depenses.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updDep(x.id,{nom:v})} placeholder="Dépense"/></div><Money value={x.montant} onChange={v=>updDep(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delDep(x.id)}/></div>))}</div>
+          <button onClick={()=>go&&go("cashflow")} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-3 py-2 rounded-xl transition cursor-pointer">Gérer mes dépenses en détail (fixe / variable, %) dans le Cashflow <Icon name="trending" className="w-4 h-4"/></button></div>}
         {e===7&&<div className="space-y-3"><Field label="Mon objectif de patrimoine net (en €)"><Money value={data.params.objectifEUR} onChange={v=>setP("objectifEUR",v)}/></Field>
           <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton disponible est de <b className="text-brand-700">{fmtE(dispoW)}</b>{pvLat!==0&&<>, plus <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
       </div>
@@ -847,9 +850,10 @@ function Immobilier({data,setData}){
   const addUsage=u=>{ setMode(u); setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Nouvelle opération":"Nouveau bien",prixAchat:0,fraisNotaire:0,fraisAgence:0,fraisCredit:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]})); };
   const mc=data.mois[data.moisActif]||{depenses:[]};
   const logementMois=sum(mc.depenses.filter(p=>groupeOf(p.nom)==="Logement"),x=>x.montant);
+  const detteLiee=bid=>sum((data.dettes||[]).filter(x=>x.bienLie===bid),x=>x.montant);
 
   const calcLoc=b=>{const occ=(12-Math.min(12,n(b.vacance)))/12, cr=coutRevient(b), loyerAn=n(b.loyer)*12*occ;
-    return {cr, occ, pv:n(b.valeur)-cr, equity:n(b.valeur)-n(b.capital),
+    return {cr, occ, pv:n(b.valeur)-cr-detteLiee(b.id), equity:n(b.valeur)-n(b.capital)-detteLiee(b.id),
       rdtBrut:cr>0?loyerAn/cr:0, rdtNet:cr>0?(loyerAn-n(b.charges)*12-n(b.taxe))/cr:0,
       cfMois:n(b.loyer)*occ-n(b.charges)-n(b.taxe)/12-n(b.mensualite)};};
   const calcMdb=b=>{const fa=n(b.fraisNotaire)+n(b.fraisAgence), portage=n(b.portageMois)*n(b.dureeMois), coutTot=n(b.prixAchat)+fa+n(b.travaux)+portage+n(b.fraisRevente);
@@ -857,8 +861,8 @@ function Immobilier({data,setData}){
     return {portage,coutTot,margeBrute,margeNet,is,net, roi:coutTot>0?net/coutTot:0, roiAn:n(b.dureeMois)>0?(coutTot>0?net/coutTot:0)*12/n(b.dureeMois):0};};
 
   let kpis=[];
-  if(mode==="RP"){ const t=list.reduce((s,b)=>{s.val+=n(b.valeur);s.cr+=coutRevient(b);s.cap+=n(b.capital);return s;},{val:0,cr:0,cap:0});
-    kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Coût de revient",fmtE(t.cr),null,"ink"],["Plus-value latente",fmtE(t.val-t.cr),null,(t.val-t.cr)>=0?"blue":"red"],["Valeur nette",fmtE(t.val-t.cap),null,"blue"]]; }
+  if(mode==="RP"){ const t=list.reduce((s,b)=>{s.val+=n(b.valeur);s.cr+=coutRevient(b);s.cap+=n(b.capital);s.dl+=detteLiee(b.id);return s;},{val:0,cr:0,cap:0,dl:0});
+    kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Coût de revient",fmtE(t.cr),null,"ink"],["Plus-value latente",fmtE(t.val-t.cr-t.dl),null,(t.val-t.cr-t.dl)>=0?"blue":"red"],["Valeur nette",fmtE(t.val-t.cap-t.dl),null,"blue"]]; }
   else if(mode==="Locatif"){ const t=list.reduce((s,b)=>{const c=calcLoc(b);s.val+=n(b.valeur);s.cf+=c.cfMois;s.pv+=c.pv;s.loyerAn+=n(b.loyer)*12*c.occ;s.net+=(n(b.loyer)*12*c.occ-n(b.charges)*12-n(b.taxe));s.cr+=c.cr;return s;},{val:0,cf:0,pv:0,loyerAn:0,net:0,cr:0});
     kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Cashflow locatif",fmtE(t.cf)+" / mois",null,t.cf>=0?"blue":"red"],["Rendement net moyen",fmtP(t.cr>0?t.net/t.cr:0),null,"blue"],["Plus-value latente",fmtE(t.pv),null,t.pv>=0?"blue":"red"]]; }
   else { const t=list.reduce((s,b)=>{const c=calcMdb(b);s.eng+=n(b.prixAchat)+n(b.fraisNotaire)+n(b.fraisAgence)+n(b.travaux);s.rev+=n(b.prixRevente);s.net+=c.net;return s;},{eng:0,rev:0,net:0});
@@ -901,10 +905,11 @@ function Immobilier({data,setData}){
               <CreditBien b={b} upd={upd}/>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Mini label="Coût de revient" v={fmtE(coutRevient(b))}/>
-                <Mini label="Plus-value latente" v={fmtE(n(b.valeur)-coutRevient(b))} tone={(n(b.valeur)-coutRevient(b))>=0?"brand":"red"}/>
-                <Mini label="Valeur nette" v={fmtE(n(b.valeur)-n(b.capital))}/>
+                <Mini label="Plus-value latente" v={fmtE(n(b.valeur)-coutRevient(b)-detteLiee(b.id))} tone={(n(b.valeur)-coutRevient(b)-detteLiee(b.id))>=0?"brand":"red"}/>
+                <Mini label="Valeur nette" v={fmtE(n(b.valeur)-n(b.capital)-detteLiee(b.id))}/>
                 <Mini label="Charges du logement" v={fmtE(logementMois)+" / mois"}/>
               </div>
+              {detteLiee(b.id)>0&&<p className="text-xs text-ink-400">Dont {fmtE(detteLiee(b.id))} de dette rattachée à ce bien (saisie dans Cashflow → Dettes et crédits), déduite de sa plus-value latente.</p>}
               <p className="text-xs text-ink-400">Les charges récurrentes (électricité, eau, copro, crédit) de ta résidence principale sont suivies dans <b>Cashflow, poste Logement</b> ({fmtE(logementMois)}/mois) et ne sont pas recomptées ici. La plus-value de revente d'une résidence principale est exonérée d'impôt.</p>
             </>}
             {mode==="Locatif"&&(()=>{const c=calcLoc(b);return(<>
@@ -1393,7 +1398,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
   const del=(k,id)=>setMc(k,mc[k].filter(x=>x.id!==id));
   const updC=(id,p)=>setData(d=>({...d,dettes:d.dettes.map(x=>x.id===id?{...x,...p}:x)}));
   const delC=id=>setData(d=>({...d,dettes:d.dettes.filter(x=>x.id!==id)}));
-  const addC=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"",type:"credit",montant:0,mensualite:0,taux:0.03,actifLie:""}]}));
+  const addC=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"",type:"credit",montant:0,mensualite:0,taux:0.03,actifLie:"",bienLie:""}]}));
   const addRevNamed=(nom,type)=>setMc("revenus",[...mc.revenus,{id:uid(),nom,montant:0,type:type||"passif"}]);
   const addDepNamed=(nom,cat)=>setMc("depenses",[...mc.depenses,{id:uid(),nom,montant:0,cat:cat||"variable"}]);
   const dejaR=new Set(mc.revenus.map(r=>(r.nom||"").toLowerCase())), dejaD=new Set(mc.depenses.map(p=>(p.nom||"").toLowerCase()));
@@ -1402,6 +1407,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
   const depPrecList=moisPrec?((data.mois[moisPrec]||{}).depenses||[]):[];
   const depPrec=sum(depPrecList,x=>x.montant); const deltaDep=depPrec>0?(c.depCourante-depPrec)/depPrec:null;
   const totFixe=sum(mc.depenses.filter(p=>(p.cat||"variable")==="fixe"),x=>x.montant); const totVar=c.depCourante-totFixe;
+  const immoList=(data.biens||[]).filter(b=>b.usage==="RP"||b.usage==="Locatif");
   const groupes=(()=>{const m={}; GROUPES.forEach(g=>m[g.nom]={nom:g.nom,pct:g.pct,total:0}); m["Autres"]={nom:"Autres",pct:null,total:0};
     mc.depenses.forEach(p=>{m[groupeOf(p.nom)].total+=n(p.montant);});
     return Object.values(m).filter(g=>g.total>0).map(g=>{const part=c.revT?g.total/c.revT:0; const ratio=g.pct?part/g.pct:0;
@@ -1452,7 +1458,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
           {c.revT>0&&<span className="text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5">{Math.round((1-c.depCourante/c.revT)*100)}% restant</span>}
         </div></Card>
     </div>
-    <Card title="Dettes et crédits" sub="Un crédit a une mensualité (qui compte dans ton cashflow) ; une dette est de l'argent que tu dois (ex : un prêt d'un proche). Dans les deux cas, le capital restant est déduit de ton patrimoine." right={<AddBtn onClick={addC}>Ajouter</AddBtn>}>
+    <Card title="Dettes et crédits" sub="Un crédit a une mensualité (qui compte dans ton cashflow) ; une dette est de l'argent que tu dois (ex : un prêt d'un proche). Rattachée à un bien immobilier, une dette réduit sa plus-value latente sans toucher à ton disponible." right={<AddBtn onClick={addC}>Ajouter</AddBtn>}>
       <div className="space-y-2">
         {data.dettes.map(x=>{const t=x.type||"credit"; return(<div key={x.id} className="rounded-2xl border border-ink-100 p-2.5 space-y-2">
           <div className="flex items-center gap-2">
@@ -1465,12 +1471,14 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
                 <Field label="Mensualité"><Money value={x.mensualite||0} onChange={v=>updC(x.id,{mensualite:v})}/></Field>
                 <Field label="Capital restant"><Money value={x.montant} onChange={v=>updC(x.id,{montant:v})}/></Field>
                 <Field label="Taux"><Pct value={x.taux} onChange={v=>updC(x.id,{taux:v})}/></Field>
-                <Field label="Rattaché au bien"><select value={x.actifLie||""} onChange={e=>updC(x.id,{actifLie:e.target.value})} className="w-full text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white"><option value="">Aucun</option>{data.patrimoine.map(a=><option key={a.id} value={a.id}>{a.nom}</option>)}</select></Field>
+                <Field label="Rattachée à un bien immo"><select value={x.bienLie||""} onChange={e=>updC(x.id,{bienLie:e.target.value})} className="w-full text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white"><option value="">Aucun</option>{immoList.map(b=><option key={b.id} value={b.id}>{b.nom}</option>)}</select></Field>
               </div>
-            : <div className="grid grid-cols-2 gap-2">
+            : <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <Field label="Montant dû"><Money value={x.montant} onChange={v=>updC(x.id,{montant:v})}/></Field>
                 <Field label="Remboursement mensuel (optionnel)"><Money value={x.mensualite||0} onChange={v=>updC(x.id,{mensualite:v})}/></Field>
+                <Field label="Rattachée à un bien immo"><select value={x.bienLie||""} onChange={e=>updC(x.id,{bienLie:e.target.value})} className="w-full text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white"><option value="">Aucun</option>{immoList.map(b=><option key={b.id} value={b.id}>{b.nom}</option>)}</select></Field>
               </div>}
+          {x.bienLie&&<div className="text-[11px] text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-2 py-1">Rattachée à un bien : ces {fmtE(x.montant)} réduisent sa plus-value latente, pas ton disponible.</div>}
         </div>);})}
         {data.dettes.length===0&&<div className="text-sm text-ink-400 py-2">Aucune dette ni crédit. Ajoute-en si tu as un emprunt ou de l'argent à rendre.</div>}
       </div>

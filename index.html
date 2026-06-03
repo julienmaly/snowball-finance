@@ -350,7 +350,7 @@ function App(){
     // Disponible = argent réellement mobilisable : on retire l'immobilier (un bien n'est pas disponible) et la plus-value latente.
     const reSur=sum(immoBiens,b=>coutRevient(b)-n(b.capital))+sum(data.patrimoine.filter(a=>a.classe==="Immobilier"),a=>n(a.prixRevient)>0?n(a.prixRevient):n(a.montant));
     const dispo=netSur-reSur;
-    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,netSur,reSur,dispo,dispoUSD:dispo*eur,pctObjDispo:objEUR?dispo/objEUR:0,resteDispo:Math.max(0,objEUR-dispo),revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
+    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,netSur,reSur,dispo,dispoUSD:dispo*eur,pctObjDispo:objEUR?dispo/objEUR:0,resteDispo:Math.max(0,objEUR-dispo),revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,pvFin,pvImmo,pvBourse,
       tauxEpargne:revT?cashflow/revT:0, objEUR, pctObj:objEUR?net/objEUR:0, reste:Math.max(0,objEUR-net),
       ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
   },[data,mc]);
@@ -747,6 +747,15 @@ function Patrimoine({data,setData,c,alloc,go,openAssistant}){
       <KPI label="Dettes" value={fmtE(c.dettesT)} tone="red"/>
       <KPI label="Disponible" value={fmtE(c.dispo)} sub="hors immobilier et plus-value latente" tone="blue"/>
       <KPI label="Plus-value latente" value={fmtE(c.pvLatente)} tone={c.pvLatente>=0?"blue":"red"}/></div>
+    {c.pvLatente!==0&&<div className="panel rounded-2xl p-4 text-sm">
+      <div className="font-heading font-semibold text-ink-800 mb-2">D'où vient ta plus-value latente <span className="font-normal text-ink-400 text-xs">(valeur actuelle moins ce que tu as payé, gain non réalisé)</span></div>
+      <div className="grid grid-cols-3 gap-3">
+        <div><div className="text-xs text-ink-500">Immobilier</div><div className={"font-heading font-bold "+(c.pvImmo>=0?"text-brand-700":"text-red-500")}>{fmtE(c.pvImmo)}</div><div className="text-[11px] text-ink-400">valeur estimée − coût de revient</div></div>
+        <div><div className="text-xs text-ink-500">Investissements</div><div className={"font-heading font-bold "+(c.pvBourse>=0?"text-brand-700":"text-red-500")}>{fmtE(c.pvBourse)}</div><div className="text-[11px] text-ink-400">valeur − montant investi</div></div>
+        <div><div className="text-xs text-ink-500">Comptes</div><div className={"font-heading font-bold "+(c.pvFin>=0?"text-brand-700":"text-red-500")}>{fmtE(c.pvFin)}</div><div className="text-[11px] text-ink-400">montant − montant investi</div></div>
+      </div>
+      <p className="text-xs text-ink-400 mt-2">Le détail ligne par ligne est dans chaque sous-onglet (Immobilier, Investissements, Comptes). Une ligne ne compte que si tu as renseigné la valeur ET le coût d'achat.</p>
+    </div>}
     <Card title="Allocation"><Donut data={alloc}/></Card>
     <Conseils items={tips}/>
     <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit">{SUBS.map(([k,l])=><button key={k} onClick={()=>setSub(k)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition "+(sub===k?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}>{l}</button>)}</div>

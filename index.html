@@ -326,8 +326,7 @@ function App(){
     r.readAsText(f); };
 
   const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["cashflow","Cashflow","wallet"],
-    ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],
-    ["immobilier","Immobilier","home"],["bourse","Bourse","trending"],["reglages","Réglages","settings"]];
+    ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
 
   return (<div className="min-h-screen">
     <header className="max-w-6xl mx-auto px-4 pt-6 pb-2">
@@ -351,8 +350,6 @@ function App(){
     <main className="max-w-6xl mx-auto px-4 py-6">
       {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab} ghReady={ghReady} ghMaj={gh.maj}/>}
       {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc} go={setTab}/>}
-      {tab==="immobilier"&&<Immobilier data={data} setData={setData}/>}
-      {tab==="bourse"&&<Bourse data={data} setData={setData}/>}
       {tab==="cashflow"&&<Cashflow data={data} setData={setData} mc={mc} setMc={setMc} moisActif={moisActif} c={c}/>}
       {tab==="projection"&&<Projection data={data} setData={setData} c={c}/>}
       {tab==="suivi"&&<Suivi data={data} setData={setData} c={c} hist={histCashflow}/>}
@@ -446,8 +443,8 @@ function GuideDemarrage({data,ghReady,go}){
   ];
   const opt=[
     {fait:(data.dettes||[]).length>0, label:"Renseigne tes crédits", hint:"Mensualité et capital restant (Cashflow)", tab:"cashflow"},
-    {fait:(data.biens||[]).length>0, label:"Ajoute tes biens immobiliers", hint:"Si tu possèdes de l'immobilier", tab:"immobilier"},
-    {fait:(data.bourse||[]).length>0, label:"Ajoute ton portefeuille bourse", hint:"Actions, ETF, crypto", tab:"bourse"},
+    {fait:(data.biens||[]).length>0, label:"Ajoute tes biens immobiliers", hint:"Patrimoine, sous-onglet Immobilier", tab:"patrimoine"},
+    {fait:(data.bourse||[]).length>0, label:"Ajoute ton portefeuille bourse", hint:"Patrimoine, sous-onglet Bourse", tab:"patrimoine"},
     {fait:(data.suivi||[]).some(r=>n(r.brut)>0), label:"Renseigne ton historique", hint:"Tes années passées (Suivi)", tab:"suivi"},
     {fait:(data.jalons||[]).some(j=>j.statut==="Fait"||j.statut==="En cours"), label:"Fixe-toi des objectifs", hint:"Tes objectifs de progression", tab:"objectifs"},
   ];
@@ -480,7 +477,7 @@ function SuiviMensuel({data,setData,go,ghMaj}){
     {k:"cashflow",fait:!!r.cashflow,label:"Mettre à jour mes revenus et dépenses",tab:"cashflow"},
     {k:"patrimoine",fait:!!r.patrimoine,label:"Actualiser la valeur de mon patrimoine",tab:"patrimoine"},
     {k:"credits",fait:!!r.credits,label:"Vérifier mes crédits (capital restant)",tab:"cashflow"},
-    {k:"actifs",fait:!!r.actifs,label:"Actualiser immobilier et bourse",tab:"immobilier"},
+    {k:"actifs",fait:!!r.actifs,label:"Actualiser immobilier et bourse",tab:"patrimoine"},
     {k:"save",fait:savedThisMonth||!!r.save,label:"Sauvegarder sur GitHub",tab:"reglages",auto:savedThisMonth},
   ];
   const done=items.filter(i=>i.fait).length, total=items.length;
@@ -556,83 +553,115 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj}){
 }
 
 /* Patrimoine */
+function AssistantGuide({data,setData,onClose}){
+  const [e,setE]=useState(0);
+  const addAsset=(nom,classe)=>setData(d=>({...d,patrimoine:[...d.patrimoine,{id:uid(),nom,etablissement:"",pays:"",montant:0,prixRevient:0,classe}]}));
+  const updA=(id,p)=>setData(d=>({...d,patrimoine:d.patrimoine.map(a=>a.id===id?{...a,...p}:a)}));
+  const delA=id=>setData(d=>({...d,patrimoine:d.patrimoine.filter(a=>a.id!==id)}));
+  const addUsage=u=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Opération":"Bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
+  const updB=(id,p)=>setData(d=>({...d,biens:(d.biens||[]).map(b=>b.id===id?{...b,...p}:b)}));
+  const delB=id=>setData(d=>({...d,biens:(d.biens||[]).filter(b=>b.id!==id)}));
+  const addBo=(nom,type)=>setData(d=>({...d,bourse:[...(d.bourse||[]),{id:uid(),nom,type,investi:0,valeur:0,dividendes:0}]}));
+  const updBo=(id,p)=>setData(d=>({...d,bourse:(d.bourse||[]).map(x=>x.id===id?{...x,...p}:x)}));
+  const delBo=id=>setData(d=>({...d,bourse:(d.bourse||[]).filter(x=>x.id!==id)}));
+  const addCr=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"Crédit",montant:0,mensualite:0,taux:0.03,actifLie:""}]}));
+  const updCr=(id,p)=>setData(d=>({...d,dettes:d.dettes.map(x=>x.id===id?{...x,...p}:x)}));
+  const delCr=id=>setData(d=>({...d,dettes:d.dettes.filter(x=>x.id!==id)}));
+  const setP=(k,v)=>setData(d=>({...d,params:{...d.params,[k]:v}}));
+  const biens=data.biens||[], bourse=data.bourse||[];
+  const brut=sum(data.patrimoine,a=>a.montant)+sum(biens.filter(b=>b.usage!=="MDB"),b=>b.valeur)+sum(bourse,x=>x.valeur);
+  const dettesT=sum(data.dettes,x=>x.montant)+sum(biens.filter(b=>b.usage!=="MDB"),b=>b.capital);
+  const net=brut-dettesT;
+  const titres=["Bienvenue","Comptes & placements","Immobilier","Bourse","Crédits","Objectif"];
+  const dejaP=new Set(data.patrimoine.map(a=>(a.nom||"").toLowerCase())), dejaB=new Set(bourse.map(x=>(x.nom||"").toLowerCase()));
+  return (<div className="fixed inset-0 z-50 bg-ink-900/40 flex items-start sm:items-center justify-center p-3 overflow-y-auto" style={{backdropFilter:"blur(4px)"}}>
+    <div className="panel rounded-3xl w-full max-w-2xl my-6 p-5 sm:p-6">
+      <div className="flex items-center justify-between mb-3"><h3 className="font-heading font-bold text-lg text-ink-900">Assistant guidé</h3>
+        <button onClick={onClose} className="text-ink-400 hover:text-ink-700 cursor-pointer"><Icon name="x" className="w-5 h-5"/></button></div>
+      <div className="flex gap-1 mb-4">{titres.map((t,i)=><div key={i} className={"h-1.5 flex-1 rounded-full "+(i<=e?"bg-brand-500":"bg-ink-100")}/>)}</div>
+      <div className="min-h-[230px]">
+        <div className="text-xs uppercase tracking-wide text-ink-400">Étape {e+1} / {titres.length}</div>
+        <h4 className="font-heading font-semibold text-ink-900 text-lg mb-3">{titres[e]}</h4>
+        {e===0&&<div className="text-sm text-ink-600 space-y-2"><p>Je vais t'aider à tout renseigner, étape par étape : tes comptes, ton immobilier, ta bourse, tes crédits, puis ton objectif.</p><p>À chaque étape, clique sur ce que tu possèdes et indique le montant. Passe une étape si elle ne te concerne pas.</p></div>}
+        {e===1&&<div className="space-y-3"><Chips options={SUGG_PATRI.map(([label,classe])=>({label,has:dejaP.has(label.toLowerCase()),add:()=>addAsset(label,classe)}))}/>
+          <div className="space-y-2">{data.patrimoine.map(a=>(<div key={a.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={a.nom} onChange={v=>updA(a.id,{nom:v})} placeholder="Nom du compte"/></div><Money value={a.montant} onChange={v=>updA(a.id,{montant:v})} className="w-32"/><IconBtn name="x" onClick={()=>delA(a.id)}/></div>))}</div></div>}
+        {e===2&&<div className="space-y-3"><Chips options={[{label:"Résidence principale",add:()=>addUsage("RP")},{label:"Bien locatif",add:()=>addUsage("Locatif")},{label:"Achat / revente",add:()=>addUsage("MDB")}]}/>
+          <div className="space-y-2">{biens.map(b=>(<div key={b.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={b.nom} onChange={v=>updB(b.id,{nom:v})} placeholder="Nom du bien"/></div><Money value={b.valeur} onChange={v=>updB(b.id,{valeur:v})} className="w-32"/><IconBtn name="x" onClick={()=>delB(b.id)}/></div>))}</div>
+          <p className="text-xs text-ink-400">Tu détailleras chaque bien (prix, frais, travaux, loyers, crédit) dans Patrimoine, sous-onglet Immobilier.</p></div>}
+        {e===3&&<div className="space-y-3"><Chips options={SUGG_BOURSE.map(([label,type])=>({label,has:dejaB.has(label.toLowerCase()),add:()=>addBo(label,type)}))}/>
+          <div className="space-y-2">{bourse.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updBo(x.id,{nom:v})} placeholder="Nom de la ligne"/></div><Money value={x.valeur} onChange={v=>updBo(x.id,{valeur:v})} className="w-32"/><IconBtn name="x" onClick={()=>delBo(x.id)}/></div>))}</div></div>}
+        {e===4&&<div className="space-y-3"><button onClick={addCr} className="inline-flex items-center gap-1.5 text-sm text-brand-700 font-medium hover:underline cursor-pointer"><Icon name="plus" className="w-4 h-4"/>Ajouter un crédit</button>
+          <div className="hidden sm:flex gap-2 text-xs text-ink-400 px-1"><div className="flex-1">Crédit</div><div className="w-24 text-right pr-2">Mensualité</div><div className="w-32 text-right pr-2">Capital restant</div><div className="w-8"/></div>
+          <div className="space-y-2">{data.dettes.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updCr(x.id,{nom:v})} placeholder="Crédit"/></div><Money value={x.mensualite} onChange={v=>updCr(x.id,{mensualite:v})} className="w-24"/><Money value={x.montant} onChange={v=>updCr(x.id,{montant:v})} className="w-32"/><IconBtn name="x" onClick={()=>delCr(x.id)}/></div>))}</div></div>}
+        {e===5&&<div className="space-y-3"><Field label="Mon objectif de patrimoine net (en €)"><Money value={data.params.objectifEUR} onChange={v=>setP("objectifEUR",v)}/></Field>
+          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net est de <b className="text-brand-700">{fmtE(net)}</b>. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
+      </div>
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-ink-100">
+        <div className="text-sm text-ink-500">Patrimoine net : <b className="text-brand-700">{fmtE(net)}</b></div>
+        <div className="flex gap-2">{e>0&&<button onClick={()=>setE(e-1)} className="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-100 text-sm cursor-pointer">Précédent</button>}
+          {e<titres.length-1?<button onClick={()=>setE(e+1)} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Suivant</button>
+            :<button onClick={onClose} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Terminer</button>}</div>
+      </div>
+    </div></div>);
+}
+
 function Patrimoine({data,setData,c,alloc,go}){
+  const [sub,setSub]=useState("financier");
+  const [wizard,setWizard]=useState(false);
   const [open,setOpen]=useState({});
   const updA=(id,p)=>setData(d=>({...d,patrimoine:d.patrimoine.map(a=>a.id===id?{...a,...p}:a)}));
   const delA=id=>setData(d=>({...d,patrimoine:d.patrimoine.filter(a=>a.id!==id)}));
   const addA=()=>setData(d=>({...d,patrimoine:[...d.patrimoine,{id:uid(),nom:"Nouvel actif",etablissement:"",pays:"",montant:0,prixRevient:0,classe:"Liquidités"}]}));
   const addAsset=(nom,classe)=>setData(d=>({...d,patrimoine:[...d.patrimoine,{id:uid(),nom,etablissement:"",pays:"",montant:0,prixRevient:0,classe}]}));
   const dejaP=new Set(data.patrimoine.map(a=>(a.nom||"").toLowerCase()));
-  const updD=(id,p)=>setData(d=>({...d,dettes:d.dettes.map(x=>x.id===id?{...x,...p}:x)}));
-  const delD=id=>setData(d=>({...d,dettes:d.dettes.filter(x=>x.id!==id)}));
-  const addD=()=>setData(d=>({...d,dettes:[...d.dettes,{id:uid(),nom:"Nouvelle dette",montant:0,taux:0.03,actifLie:""}]}));
   const detteFor=aid=>sum((data.dettes||[]).filter(x=>x.actifLie===aid),x=>x.montant);
-  const nomActif=aid=>{const a=data.patrimoine.find(x=>x.id===aid);return a?a.nom:"";};
   const finBrut=sum(data.patrimoine,a=>a.montant);
   const tips=[];
-  if(c.brut>0&&c.immoValeur/c.brut>0.65) tips.push({tone:"info",titre:"Poids de l'immobilier",txt:"l'immobilier pèse "+fmtP(c.immoValeur/c.brut)+" de ton patrimoine. Des actifs plus liquides (bourse) équilibreraient le risque."});
-  if(c.brut>0&&c.cash/c.brut<0.05) tips.push({tone:"warn",titre:"Peu de liquidités",txt:"tes liquidités ne font que "+fmtP(c.cash/c.brut)+" du patrimoine. Garde de quoi saisir les opportunités et absorber les imprévus."});
+  if(c.brut>0&&c.immoValeur/c.brut>0.65) tips.push({tone:"info",titre:"Poids de l'immobilier",txt:"l'immobilier pèse "+fmtP(c.immoValeur/c.brut)+" de ton patrimoine. Des actifs plus liquides équilibreraient le risque."});
+  if(c.brut>0&&c.cash/c.brut<0.05) tips.push({tone:"warn",titre:"Peu de liquidités",txt:"tes liquidités ne font que "+fmtP(c.cash/c.brut)+" du patrimoine. Garde de quoi absorber les imprévus."});
   if(c.brut>0&&c.dettesT/c.brut>0.6) tips.push({tone:"warn",titre:"Endettement élevé",txt:"tes dettes représentent "+fmtP(c.dettesT/c.brut)+" de tes actifs."});
   if(!tips.length&&c.brut>0) tips.push({tone:"good",titre:"Allocation équilibrée",txt:"continue d'alimenter régulièrement pour faire jouer la boule de neige."});
+  const SUBS=[["financier","Financier"],["immobilier","Immobilier"],["bourse","Bourse"]];
   return (<div className="space-y-5">
+    {wizard&&<AssistantGuide data={data} setData={setData} onClose={()=>setWizard(false)}/>}
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <KPI label="Patrimoine brut" value={fmtE(c.brut)} icon="bank"/>
       <KPI label="Dettes" value={fmtE(c.dettesT)} tone="red"/>
       <KPI label="Patrimoine net" value={fmtE(c.net)} tone="blue"/>
       <KPI label="Plus-value latente" value={fmtE(c.pvLatente)} tone={c.pvLatente>=0?"blue":"red"}/></div>
-    <Card title="Allocation"><Donut data={alloc}/></Card>
-    <AideRemplir sub="Clique sur ce que tu possèdes pour l'ajouter, puis renseigne les montants. L'immobilier et la bourse se remplissent dans leurs onglets (clique pour y aller)." groups={[
-      {titre:"Comptes et placements financiers", options:SUGG_PATRI.map(([label,classe])=>({label,has:dejaP.has(label.toLowerCase()),add:()=>addAsset(label,classe)}))},
-      {titre:"Aussi à renseigner, dans leurs onglets", options:[
-        {label:"Immobilier (résidence, locatif…)", has:(data.biens||[]).length>0, add:()=>go("immobilier")},
-        {label:"Bourse, placements, crypto", has:(data.bourse||[]).length>0, add:()=>go("bourse")},
-      ]}
-    ]}/>
-    <Card title="Mes actifs" sub="Écris simplement ce que tu as et ce que ça vaut aujourd'hui. Clique sur la flèche pour les détails (facultatif)." right={<AddBtn onClick={addA}>Ajouter</AddBtn>}>
-      <div className="space-y-2">
-        {data.patrimoine.map(a=>{const pv=n(a.prixRevient)>0?(n(a.montant)-n(a.prixRevient)):null; const det=detteFor(a.id); const o=open[a.id];return(
-          <div key={a.id} className="rounded-2xl border border-ink-100">
-            <div className="flex items-center gap-2 p-2">
-              <button onClick={()=>setOpen(s=>({...s,[a.id]:!o}))} className="text-ink-300 hover:text-brand-600 w-7 h-7 rounded-lg hover:bg-ink-100 cursor-pointer shrink-0" title="Détails">{o?"▾":"▸"}</button>
-              <div className="flex-1 min-w-[120px]"><TextInput value={a.nom} onChange={v=>updA(a.id,{nom:v})} placeholder="Ex : mon appartement"/></div>
-              <select value={a.classe} onChange={e=>updA(a.id,{classe:e.target.value})} className="w-32 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{CLASSES.map(cl=><option key={cl} value={cl}>{cl}</option>)}</select>
-              <Money value={a.montant} onChange={v=>updA(a.id,{montant:v})} className="w-32"/>
-              <IconBtn name="x" onClick={()=>delA(a.id)} title="Supprimer"/>
-            </div>
-            {o&&(()=>{const isLiq=a.classe==="Liquidités"; const costLabel=a.classe==="Immobilier"?"Coût total (achat + frais + travaux)":"Montant investi (ce que tu as mis)";
-              return(<div className="px-3 pb-3 pt-2 border-t border-ink-100 grid sm:grid-cols-2 gap-3">
-              <Field label="Où c'est placé (banque, courtier)"><TextInput value={a.etablissement||""} onChange={v=>updA(a.id,{etablissement:v})} placeholder="Facultatif"/></Field>
-              <Field label="Pays"><TextInput value={a.pays||""} onChange={v=>updA(a.id,{pays:v})} placeholder="Facultatif"/></Field>
-              {!isLiq&&<Field label={costLabel}><Money value={a.prixRevient||0} onChange={v=>updA(a.id,{prixRevient:v})}/></Field>}
-              {!isLiq&&<div className="flex flex-col justify-end text-sm pb-1">
-                {pv!=null&&<div>Plus-value latente : <b className={pv>=0?"text-brand-700":"text-red-500"}>{fmtE(pv)}</b> <span className="text-ink-400">(gain si tu vends aujourd'hui)</span></div>}
-                {det>0&&<div className="text-ink-500 mt-0.5">Crédit lié {fmtE(det)}, tu en possèdes vraiment {fmtE(n(a.montant)-det)}</div>}
-                {pv==null&&det===0&&<div className="text-xs text-ink-400">Indique le montant investi pour voir ta plus-value.</div>}
-              </div>}
-              {isLiq&&<div className="sm:col-span-2 text-xs text-ink-400">Pas de plus-value sur des liquidités, c'est du cash disponible.</div>}
-            </div>);})()}
-          </div>);})}
-      </div>
-      <div className="flex justify-between mt-3 pt-3 border-t border-ink-200 text-sm">
-        <span className="font-heading font-semibold text-ink-700">Total</span>
-        <span className="font-heading font-bold text-brand-700">{fmtE(finBrut)}</span></div>
-      <p className="text-xs text-ink-400 mt-2">Le patrimoine brut total ({fmtE(c.brut)}, KPI en haut) inclut aussi l'immobilier ({fmtE(c.immoValeur)}) et la bourse ({fmtE(c.bourseValeur)}), gérés dans leurs onglets.</p>
-    </Card>
-    <Card title="Mes crédits">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-ink-600">Capital restant dû, déduit de ton patrimoine net.</div>
-        <div className="font-heading font-bold text-red-500">{fmtE(c.dettesT)}</div></div>
-      <p className="text-xs text-ink-400 mt-2">Tes crédits se gèrent dans l'onglet <b>Cashflow</b> : leurs mensualités sont des dépenses, et tu peux les rattacher à un bien.</p>
-    </Card>
+    <Card title="Allocation" right={<button onClick={()=>setWizard(true)} className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 px-3 py-2 rounded-xl cursor-pointer"><Icon name="check" className="w-4 h-4"/>Assistant guidé</button>}><Donut data={alloc}/></Card>
     <Conseils items={tips}/>
-    <Card title="En clair">
-      <ul className="text-sm text-ink-600 space-y-1.5 list-disc pl-5">
-        <li><b>Ce que ça vaut</b> : le prix si tu vendais aujourd'hui. C'est ce chiffre qui compte dans ton patrimoine.</li>
-        <li><b>Ce que ça t'a coûté</b> : ce que tu as payé en tout (achat + travaux). Si ça vaut plus que ça t'a coûté, la différence est ta <b>plus-value latente</b> : un gain que tu touches le jour où tu revends.</li>
-        <li><b>Crédit rattaché</b> : ce que tu possèdes vraiment d'un bien, c'est sa valeur moins ce qu'il te reste à rembourser.</li>
-        <li>Exemple : appartement qui vaut 220 000, qui t'a coûté 185 000, avec 150 000 de crédit. Plus-value latente 35 000, et tu en possèdes vraiment 70 000.</li>
-      </ul>
-    </Card>
+    <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit">{SUBS.map(([k,l])=><button key={k} onClick={()=>setSub(k)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition "+(sub===k?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}>{l}</button>)}</div>
+    {sub==="financier"&&<div className="space-y-5">
+      <AideRemplir sub="Clique sur ce que tu possèdes, ou utilise l'assistant guidé (bouton en haut) pour tout remplir d'un coup." groups={[{titre:"Comptes et placements", options:SUGG_PATRI.map(([label,classe])=>({label,has:dejaP.has(label.toLowerCase()),add:()=>addAsset(label,classe)}))}]}/>
+      <Card title="Mes actifs financiers" sub="Comptes, placements, liquidités. Clique sur la flèche pour les détails (facultatif)." right={<AddBtn onClick={addA}>Ajouter</AddBtn>}>
+        <div className="space-y-2">
+          {data.patrimoine.map(a=>{const pv=n(a.prixRevient)>0?(n(a.montant)-n(a.prixRevient)):null; const det=detteFor(a.id); const o=open[a.id];return(
+            <div key={a.id} className="rounded-2xl border border-ink-100">
+              <div className="flex items-center gap-2 p-2">
+                <button onClick={()=>setOpen(s=>({...s,[a.id]:!o}))} className="text-ink-300 hover:text-brand-600 w-7 h-7 rounded-lg hover:bg-ink-100 cursor-pointer shrink-0">{o?"▾":"▸"}</button>
+                <div className="flex-1 min-w-[120px]"><TextInput value={a.nom} onChange={v=>updA(a.id,{nom:v})} placeholder="Ex : Livret A"/></div>
+                <select value={a.classe} onChange={e=>updA(a.id,{classe:e.target.value})} className="w-32 text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{CLASSES.map(cl=><option key={cl} value={cl}>{cl}</option>)}</select>
+                <Money value={a.montant} onChange={v=>updA(a.id,{montant:v})} className="w-32"/>
+                <IconBtn name="x" onClick={()=>delA(a.id)}/>
+              </div>
+              {o&&(()=>{const isLiq=a.classe==="Liquidités"; const costLabel=a.classe==="Immobilier"?"Coût total (achat + frais + travaux)":"Montant investi";
+                return(<div className="px-3 pb-3 pt-2 border-t border-ink-100 grid sm:grid-cols-2 gap-3">
+                <Field label="Où c'est placé (banque, courtier)"><TextInput value={a.etablissement||""} onChange={v=>updA(a.id,{etablissement:v})} placeholder="Facultatif"/></Field>
+                <Field label="Pays"><TextInput value={a.pays||""} onChange={v=>updA(a.id,{pays:v})} placeholder="Facultatif"/></Field>
+                {!isLiq&&<Field label={costLabel}><Money value={a.prixRevient||0} onChange={v=>updA(a.id,{prixRevient:v})}/></Field>}
+                {!isLiq&&<div className="flex flex-col justify-end text-sm pb-1">{pv!=null&&<div>Plus-value latente : <b className={pv>=0?"text-brand-700":"text-red-500"}>{fmtE(pv)}</b></div>}{pv==null&&<div className="text-xs text-ink-400">Indique le montant investi pour voir ta plus-value.</div>}</div>}
+                {isLiq&&<div className="sm:col-span-2 text-xs text-ink-400">Pas de plus-value sur des liquidités, c'est du cash disponible.</div>}
+              </div>);})()}
+            </div>);})}
+        </div>
+        <div className="flex justify-between mt-3 pt-3 border-t border-ink-200 text-sm"><span className="font-heading font-semibold text-ink-700">Total financier</span><span className="font-heading font-bold text-brand-700">{fmtE(finBrut)}</span></div>
+      </Card>
+      <Card title="Mes crédits"><div className="flex items-center justify-between"><div className="text-sm text-ink-600">Capital restant dû, déduit de ton patrimoine net.</div><div className="font-heading font-bold text-red-500">{fmtE(c.dettesT)}</div></div>
+        <p className="text-xs text-ink-400 mt-2">Les crédits se gèrent dans l'onglet <b>Cashflow</b> (mensualités = dépenses) ou via l'assistant guidé.</p></Card>
+    </div>}
+    {sub==="immobilier"&&<Immobilier data={data} setData={setData}/>}
+    {sub==="bourse"&&<Bourse data={data} setData={setData}/>}
   </div>);
 }
 

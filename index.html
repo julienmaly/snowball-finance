@@ -341,7 +341,10 @@ function App(){
     const depCourante=sum(mc.depenses,x=>x.montant), mensuCredits=sum(data.dettes,x=>x.mensualite);
     const depT=depCourante+mensuCredits, cash=sum(data.patrimoine.filter(a=>a.classe==="Liquidités"),a=>a.montant);
     const cashflow=(revTman-depT)+immoCf+bourseDiv, eur=data.params.eurusd||1.08, objEUR=data.params.objectifEUR||1000000;
-    const pvLatente=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"), a=>n(a.montant)-n(a.prixRevient));
+    const pvFin=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"), a=>n(a.montant)-n(a.prixRevient));
+    const pvImmo=sum(immoBiens.filter(b=>coutRevient(b)>0), b=>n(b.valeur)-coutRevient(b));
+    const pvBourse=sum(bourse.filter(x=>n(x.investi)>0), x=>n(x.valeur)-n(x.investi));
+    const pvLatente=pvFin+pvImmo+pvBourse;
     return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
       tauxEpargne:revT?cashflow/revT:0, objEUR, pctObj:objEUR?net/objEUR:0, reste:Math.max(0,objEUR-net),
       ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
@@ -373,8 +376,12 @@ function App(){
         <div className="flex-1 min-w-[220px] flex items-center">
           <h1 className="font-heading text-2xl font-bold text-ink-900 leading-tight">Snowball <span className="text-brand-600">Finance</span></h1>
         </div>
-        <div className="text-right"><div className="text-xs text-ink-400 uppercase tracking-wide">Patrimoine net</div>
-          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.net)}</div></div>
+        <div className="text-right leading-tight">
+          <div className="text-xs text-ink-400 uppercase tracking-wide">Patrimoine net</div>
+          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.net)}</div>
+          <div className="text-[11px] text-ink-400 mt-0.5">brut {fmtEk(c.brut)} − dettes {fmtEk(c.dettesT)}</div>
+          <div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>
+        </div>
       </div>
     </header>
     <nav className="max-w-6xl mx-auto px-4 sticky top-2 z-20">
@@ -475,7 +482,7 @@ function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length)
 }
 
 /* Guide de démarrage */
-function GuideDemarrage({data,ghReady,go,openAssistant}){
+function GuideDemarrage({data,setData,ghReady,go,openAssistant}){
   const mc=data.mois[data.moisActif]||{revenus:[],depenses:[]};
   const ess=[
     {fait:(data.patrimoine||[]).some(a=>n(a.montant)>0), label:"Renseigne ton patrimoine", hint:"Comptes, placements, liquidités", tab:"patrimoine"},
@@ -485,18 +492,24 @@ function GuideDemarrage({data,ghReady,go,openAssistant}){
     {fait:!!ghReady, label:"Active la sauvegarde GitHub", hint:"Pour ne jamais perdre tes données", tab:"reglages"},
   ];
   const opt=[
-    {fait:(data.dettes||[]).length>0, label:"Renseigne tes crédits", hint:"Mensualité et capital restant (Cashflow)", tab:"cashflow"},
-    {fait:(data.biens||[]).length>0, label:"Ajoute tes biens immobiliers", hint:"Patrimoine, sous-onglet Immobilier", tab:"patrimoine"},
-    {fait:(data.bourse||[]).length>0, label:"Ajoute tes investissements", hint:"Bourse, PE, crypto, PER (Patrimoine > Investissements)", tab:"patrimoine"},
-    {fait:(data.suivi||[]).some(r=>n(r.brut)>0), label:"Renseigne ton historique", hint:"Tes années passées (Suivi)", tab:"suivi"},
-    {fait:(data.jalons||[]).some(j=>j.statut==="Fait"||j.statut==="En cours"), label:"Fixe-toi des objectifs", hint:"Tes objectifs de progression", tab:"objectifs"},
+    {key:"credits",fait:(data.dettes||[]).length>0, label:"Renseigne tes crédits", hint:"Mensualité et capital restant (Cashflow)", tab:"cashflow"},
+    {key:"immo",fait:(data.biens||[]).length>0, label:"Ajoute tes biens immobiliers", hint:"Patrimoine, sous-onglet Immobilier", tab:"patrimoine"},
+    {key:"bourse",fait:(data.bourse||[]).length>0, label:"Ajoute tes investissements", hint:"Bourse, PE, crypto, PER (Patrimoine > Investissements)", tab:"patrimoine"},
+    {key:"histo",fait:(data.suivi||[]).some(r=>n(r.brut)>0), label:"Renseigne ton historique", hint:"Tes années passées (Suivi)", tab:"suivi"},
+    {key:"objectifs",fait:(data.jalons||[]).some(j=>j.statut==="Fait"||j.statut==="En cours"), label:"Fixe-toi des objectifs", hint:"Tes objectifs de progression", tab:"objectifs"},
   ];
+  const skip=data.guideSkip||{};
+  const setSkip=(k,v)=>setData(d=>{const g={...(d.guideSkip||{})}; if(v)g[k]=true; else delete g[k]; return {...d,guideSkip:g};});
   const done=ess.filter(s=>s.fait).length, total=ess.length;
   const [open,setOpen]=useState(done<total);
-  const Row=({s})=>(<button onClick={()=>go(s.tab)} className="w-full flex items-center gap-3 text-left rounded-xl p-2.5 hover:bg-ink-100 transition cursor-pointer">
-    <span className={"w-6 h-6 rounded-lg flex items-center justify-center shrink-0 "+(s.fait?"bg-brand-500 text-white":"border-2 border-ink-200 text-transparent")}><Icon name="check" className="w-4 h-4" stroke={3}/></span>
-    <span className="flex-1 min-w-0"><span className={"text-sm font-medium "+(s.fait?"text-ink-400 line-through":"text-ink-900")}>{s.label}</span><span className="block text-xs text-ink-400">{s.hint}</span></span>
-    {!s.fait&&<span className="text-xs text-brand-700 font-medium shrink-0">Aller</span>}</button>);
+  const Row=({s})=>{const skipped=s.key&&skip[s.key], fini=s.fait||skipped;
+    return (<div className="w-full flex items-center gap-3 rounded-xl p-2.5 hover:bg-ink-100 transition">
+      <span className={"w-6 h-6 rounded-lg flex items-center justify-center shrink-0 "+(fini?(skipped?"bg-ink-300 text-white":"bg-brand-500 text-white"):"border-2 border-ink-200 text-transparent")}><Icon name="check" className="w-4 h-4" stroke={3}/></span>
+      <span className="flex-1 min-w-0"><span className={"text-sm font-medium "+(fini?"text-ink-400 line-through":"text-ink-900")}>{s.label}</span><span className="block text-xs text-ink-400">{skipped?"Non concerné":s.hint}</span></span>
+      {!fini&&<button onClick={()=>go(s.tab)} className="text-xs text-brand-700 font-medium shrink-0 hover:underline cursor-pointer">Aller</button>}
+      {!fini&&s.key&&<button onClick={()=>setSkip(s.key,true)} className="text-xs text-ink-400 shrink-0 hover:text-ink-700 cursor-pointer whitespace-nowrap">Je n'ai pas</button>}
+      {skipped&&<button onClick={()=>setSkip(s.key,false)} className="text-xs text-ink-400 shrink-0 hover:text-ink-700 cursor-pointer">Annuler</button>}
+    </div>);};
   return (<div className="card panel rounded-3xl overflow-hidden">
     <div className="p-5 sm:p-6 text-white relative overflow-hidden" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
       <div className="absolute -right-6 -bottom-10 opacity-15"><Snowflake className="w-36 h-36"/></div>
@@ -560,7 +573,7 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj,openAssistant}){
   const delAct=id=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).filter(a=>a.id!==id)}));
   const addAct=()=>setData(d=>({...d,actionsPerso:[...(d.actionsPerso||[]),{id:uid(),texte:"",fait:false}]}));
   return (<div className="space-y-5">
-    <GuideDemarrage data={data} ghReady={ghReady} go={go} openAssistant={openAssistant}/>
+    <GuideDemarrage data={data} setData={setData} ghReady={ghReady} go={go} openAssistant={openAssistant}/>
     <SuiviMensuel data={data} setData={setData} go={go} ghMaj={ghMaj}/>
     <div className="grid lg:grid-cols-3 gap-4">
       <div className="lg:col-span-1"><KPIHero c={c}/></div>
@@ -759,6 +772,16 @@ function Acquisition({b,upd}){
     <Field label="Travaux (cumul, à mettre à jour)"><Money value={b.travaux} onChange={v=>upd(b.id,{travaux:v})}/></Field>
   </div>);
 }
+function CreditBien({b,upd}){
+  return (<div className="rounded-2xl bg-ink-50/70 border border-ink-100 p-3">
+    <div className="text-sm font-medium text-ink-700 mb-2">Dette liée à ce bien <span className="text-xs font-normal text-ink-400">· crédit immobilier (laisse à 0 si le bien est payé)</span></div>
+    <div className="grid sm:grid-cols-3 gap-3">
+      <Field label="Capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
+      <Field label="Mensualité"><Money value={b.mensualite} onChange={v=>upd(b.id,{mensualite:v})}/></Field>
+      <Field label="Taux d'intérêt"><Pct value={b.taux} onChange={v=>upd(b.id,{taux:v})}/></Field>
+    </div>
+  </div>);
+}
 function Immobilier({data,setData}){
   const [mode,setMode]=useState("RP");
   const [open,setOpen]=useState({});
@@ -820,8 +843,8 @@ function Immobilier({data,setData}){
             {mode==="RP"&&<>
               <div className="grid sm:grid-cols-3 gap-3">
                 <Field label="Valeur actuelle (estimation)"><Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})}/></Field>
-                <Field label="Crédit : capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
               </div>
+              <CreditBien b={b} upd={upd}/>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Mini label="Coût de revient" v={fmtE(coutRevient(b))}/>
                 <Mini label="Plus-value latente" v={fmtE(n(b.valeur)-coutRevient(b))} tone={(n(b.valeur)-coutRevient(b))>=0?"brand":"red"}/>
@@ -837,9 +860,8 @@ function Immobilier({data,setData}){
                 <Field label="Charges non récupérables (mensuel)"><Money value={b.charges} onChange={v=>upd(b.id,{charges:v})}/></Field>
                 <Field label="Taxe foncière (annuelle)"><Money value={b.taxe} onChange={v=>upd(b.id,{taxe:v})}/></Field>
                 <Field label="Vacance (mois / an)"><Money value={b.vacance} onChange={v=>upd(b.id,{vacance:v})} suffix="m"/></Field>
-                <Field label="Crédit : mensualité"><Money value={b.mensualite} onChange={v=>upd(b.id,{mensualite:v})}/></Field>
-                <Field label="Crédit : capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
               </div>
+              <CreditBien b={b} upd={upd}/>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <Mini label="Cashflow / mois" v={fmtE(c.cfMois)} tone={c.cfMois>=0?"brand":"red"}/>
                 <Mini label="Rendement brut" v={fmtP(c.rdtBrut)}/>

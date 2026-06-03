@@ -142,7 +142,7 @@ async function ghPut(g,str,sha){
 }
 
 const CLASSES=["Private Equity","Immobilier","Liquidités","Bourse","Cryptos","Autres"];
-const COULEURS={ "Private Equity":"#0369a1","Immobilier":"#0ea5e9","Liquidités":"#38bdf8","Bourse":"#6366f1","Cryptos":"#8b5cf6","Autres":"#94a3b8" };
+const COULEURS={ "Private Equity":"#0369a1","Immobilier":"#0ea5e9","Liquidités":"#38bdf8","Bourse":"#6366f1","Investissements":"#6366f1","Cryptos":"#8b5cf6","Autres":"#94a3b8" };
 const colorFor=(c,i)=> COULEURS[c] || ["#0284c7","#0ea5e9","#38bdf8","#6366f1","#8b5cf6","#94a3b8"][i%6];
 const BLUE="#0284c7";
 
@@ -327,7 +327,7 @@ function App(){
 
   const alloc=useMemo(()=>{ const m={}; data.patrimoine.forEach(a=>{m[a.classe]=(m[a.classe]||0)+n(a.montant);});
     const immo=sum((data.biens||[]).filter(b=>b.usage==="RP"||b.usage==="Locatif"),b=>b.valeur); if(immo>0) m["Immobilier"]=(m["Immobilier"]||0)+immo;
-    const bo=sum(data.bourse||[],x=>x.valeur); if(bo>0) m["Bourse"]=(m["Bourse"]||0)+bo;
+    const bo=sum(data.bourse||[],x=>x.valeur); if(bo>0) m["Investissements"]=(m["Investissements"]||0)+bo;
     return Object.keys(m).filter(k=>m[k]>0).map((k,i)=>({label:k,value:m[k],color:colorFor(k,i)})); },[data.patrimoine,data.biens,data.bourse]);
   const histCashflow=useMemo(()=> Object.keys(data.mois).sort().map(ym=>{const mm=data.mois[ym];
     return {ym,cf:sum(mm.revenus,r=>r.montant)-sum(mm.depenses,x=>x.montant)};}),[data.mois]);
@@ -434,10 +434,10 @@ function AideRemplir({sub, groups}){
     {open&&<div className="mt-4 space-y-4">{groups.map((g,i)=>(<div key={i}>{g.titre&&<div className="text-xs uppercase tracking-wide text-ink-400 mb-2">{g.titre}</div>}<Chips options={g.options}/></div>))}</div>}
   </div>);
 }
-const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["PER (retraite)","Autres"],["Private Equity","Private Equity"],["Cryptomonnaies","Cryptos"],["Or / métaux","Autres"],["Objets de valeur","Autres"]];
+const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["Espèces","Liquidités"],["Compte à terme","Liquidités"],["Or / métaux","Autres"],["Objets de valeur","Autres"]];
 const SUGG_REV=[["Salaire","actif"],["Prime / Bonus","actif"],["Activité indépendante","actif"],["Revenus locatifs","passif"],["Dividendes","passif"],["Intérêts","passif"],["Allocations / aides","actif"]];
 const SUGG_DEP=["Loyer / crédit","Électricité","Gaz","Eau","Internet","Téléphone","Alimentation","Transport","Voiture","Assurances","Santé / mutuelle","Crèche / école","Abonnements","Loisirs / sorties","Vêtements","Voyages","Impôts"];
-const SUGG_BOURSE=[["ETF","ETF"],["Action","Action"],["Obligation","Obligation"],["Crypto","Crypto"],["Fonds","Fonds"],["SCPI","Autre"]];
+const SUGG_BOURSE=[["ETF","ETF"],["Action","Action"],["Obligation","Obligation"],["Crypto","Crypto"],["Private Equity","Private Equity"],["PER","PER"],["Fonds","Fonds"],["SCPI","SCPI"]];
 function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length) return null;
   return (<Card title="Analyse" sub="Remarques générées automatiquement sur cette section">
     <div className="space-y-2">{items.map((r,i)=>{const s=toneStyle[r.tone||"info"];return(
@@ -458,7 +458,7 @@ function GuideDemarrage({data,ghReady,go,openAssistant}){
   const opt=[
     {fait:(data.dettes||[]).length>0, label:"Renseigne tes crédits", hint:"Mensualité et capital restant (Cashflow)", tab:"cashflow"},
     {fait:(data.biens||[]).length>0, label:"Ajoute tes biens immobiliers", hint:"Patrimoine, sous-onglet Immobilier", tab:"patrimoine"},
-    {fait:(data.bourse||[]).length>0, label:"Ajoute ton portefeuille bourse", hint:"Patrimoine, sous-onglet Bourse", tab:"patrimoine"},
+    {fait:(data.bourse||[]).length>0, label:"Ajoute tes investissements", hint:"Bourse, PE, crypto, PER (Patrimoine > Investissements)", tab:"patrimoine"},
     {fait:(data.suivi||[]).some(r=>n(r.brut)>0), label:"Renseigne ton historique", hint:"Tes années passées (Suivi)", tab:"suivi"},
     {fait:(data.jalons||[]).some(j=>j.statut==="Fait"||j.statut==="En cours"), label:"Fixe-toi des objectifs", hint:"Tes objectifs de progression", tab:"objectifs"},
   ];
@@ -501,7 +501,7 @@ function SuiviMensuel({data,setData,go,ghMaj}){
     {k:"cashflow",fait:!!r.cashflow,label:"Mettre à jour mes revenus et dépenses",tab:"cashflow"},
     {k:"patrimoine",fait:!!r.patrimoine,label:"Actualiser la valeur de mon patrimoine",tab:"patrimoine"},
     {k:"credits",fait:!!r.credits,label:"Vérifier mes crédits (capital restant)",tab:"cashflow"},
-    {k:"actifs",fait:!!r.actifs,label:"Actualiser immobilier et bourse",tab:"patrimoine"},
+    {k:"actifs",fait:!!r.actifs,label:"Actualiser immobilier et investissements",tab:"patrimoine"},
     {k:"save",fait:savedThisMonth||!!r.save,label:"Sauvegarder sur GitHub",tab:"reglages",auto:savedThisMonth},
   ];
   const done=items.filter(i=>i.fait).length, total=items.length;
@@ -614,7 +614,7 @@ function AssistantGuide({data,setData,onClose}){
   const brut=sum(data.patrimoine,a=>a.montant)+sum(biens.filter(b=>b.usage!=="MDB"),b=>b.valeur)+sum(bourse,x=>x.valeur);
   const dettesT=sum(data.dettes,x=>x.montant)+sum(biens.filter(b=>b.usage!=="MDB"),b=>b.capital);
   const net=brut-dettesT;
-  const titres=["Bienvenue","Comptes & placements","Immobilier","Bourse","Crédits","Revenus du mois","Dépenses du mois","Objectif"];
+  const titres=["Bienvenue","Comptes & liquidités","Immobilier","Investissements","Crédits","Revenus du mois","Dépenses du mois","Objectif"];
   const dejaP=new Set(data.patrimoine.map(a=>(a.nom||"").toLowerCase())), dejaB=new Set(bourse.map(x=>(x.nom||"").toLowerCase()));
   return (<div className="fixed inset-0 z-50 bg-ink-900/40 flex items-start sm:items-center justify-center p-3 overflow-y-auto" style={{backdropFilter:"blur(4px)"}}>
     <div className="panel rounded-3xl w-full max-w-2xl my-6 p-5 sm:p-6">
@@ -676,7 +676,7 @@ function Patrimoine({data,setData,c,alloc,go,openAssistant}){
   if(c.brut>0&&c.cash/c.brut<0.05) tips.push({tone:"warn",titre:"Peu de liquidités",txt:"tes liquidités ne font que "+fmtP(c.cash/c.brut)+" du patrimoine. Garde de quoi absorber les imprévus."});
   if(c.brut>0&&c.dettesT/c.brut>0.6) tips.push({tone:"warn",titre:"Endettement élevé",txt:"tes dettes représentent "+fmtP(c.dettesT/c.brut)+" de tes actifs."});
   if(!tips.length&&c.brut>0) tips.push({tone:"good",titre:"Allocation équilibrée",txt:"continue d'alimenter régulièrement pour faire jouer la boule de neige."});
-  const SUBS=[["financier","Financier"],["immobilier","Immobilier"],["bourse","Bourse"]];
+  const SUBS=[["financier","Comptes"],["immobilier","Immobilier"],["bourse","Investissements"]];
   return (<div className="space-y-5">
     <AssistantBanner onStart={openAssistant}/>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -688,7 +688,7 @@ function Patrimoine({data,setData,c,alloc,go,openAssistant}){
     <Conseils items={tips}/>
     <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit">{SUBS.map(([k,l])=><button key={k} onClick={()=>setSub(k)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition "+(sub===k?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}>{l}</button>)}</div>
     {sub==="financier"&&<div className="space-y-5">
-      <Card title="Mes actifs financiers" sub="Comptes, placements, liquidités. Clique sur la flèche pour les détails (facultatif)." right={<AjouterMenu options={SUGG_PATRI.map(([label,classe])=>({label,pick:()=>addAsset(label,classe)}))} onBlank={addA}/>}>
+      <Card title="Mes comptes et avoirs" sub="Comptes, livrets, assurance vie, espèces. Tes investissements (bourse, PE, crypto, PER) sont dans l'onglet Investissements." right={<AjouterMenu options={SUGG_PATRI.map(([label,classe])=>({label,pick:()=>addAsset(label,classe)}))} onBlank={addA}/>}>
         <div className="space-y-2">
           {data.patrimoine.map(a=>{const pv=n(a.prixRevient)>0?(n(a.montant)-n(a.prixRevient)):null; const det=detteFor(a.id); const o=open[a.id];return(
             <div key={a.id} className="rounded-2xl border border-ink-100">
@@ -862,7 +862,7 @@ function Immobilier({data,setData}){
 }
 
 /* Bourse / Investissement */
-const BOURSE_TYPES=["Action","ETF","Obligation","Crypto","Fonds","Autre"];
+const BOURSE_TYPES=["Action","ETF","Obligation","Crypto","Private Equity","PER","Fonds","SCPI","Autre"];
 function Bourse({data,setData}){
   const lignes=data.bourse||[];
   const upd=(id,p)=>setData(d=>({...d,bourse:(d.bourse||[]).map(x=>x.id===id?{...x,...p}:x)}));

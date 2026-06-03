@@ -193,6 +193,18 @@ function IconBtn({name,onClick,title}){
 function AddBtn({onClick,children}){
   return <button onClick={onClick} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-3 py-1.5 rounded-lg transition cursor-pointer"><Icon name="plus" className="w-4 h-4" stroke={2.5}/>{children}</button>;
 }
+function AjouterMenu({options,onBlank}){
+  const [open,setOpen]=useState(false);
+  return (<div className="relative">
+    <button onClick={()=>setOpen(!open)} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-800 hover:bg-brand-50 px-3 py-1.5 rounded-lg transition cursor-pointer"><Icon name="plus" className="w-4 h-4" stroke={2.5}/>Ajouter</button>
+    {open&&<><div className="fixed inset-0 z-20" onClick={()=>setOpen(false)}/>
+      <div className="absolute right-0 mt-1 z-30 w-64 bg-white border border-ink-200 rounded-2xl shadow-xl p-2 max-h-72 overflow-y-auto">
+        <div className="text-xs uppercase tracking-wide text-ink-400 px-2 py-1">Choisis un type</div>
+        {options.map((o,i)=><button key={i} onClick={()=>{o.pick();setOpen(false);}} className="w-full text-left px-3 py-2 rounded-lg hover:bg-brand-50 text-sm text-ink-700 cursor-pointer">{o.label}</button>)}
+        <button onClick={()=>{onBlank();setOpen(false);}} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-100 text-sm text-ink-500 cursor-pointer border-t border-ink-100 mt-1">Autre (personnalisé)</button>
+      </div></>}
+  </div>);
+}
 function Mini({label,v,tone="brand"}){return <div className="bg-ink-100/70 rounded-xl p-3"><div className="text-xs text-ink-500">{label}</div><div className={"font-heading font-bold text-"+tone+"-700"}>{v}</div></div>;}
 
 /* graphiques */
@@ -434,7 +446,7 @@ function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length)
 }
 
 /* Guide de démarrage */
-function GuideDemarrage({data,ghReady,go}){
+function GuideDemarrage({data,ghReady,go,openAssistant}){
   const mc=data.mois[data.moisActif]||{revenus:[],depenses:[]};
   const ess=[
     {fait:(data.patrimoine||[]).some(a=>n(a.montant)>0), label:"Renseigne ton patrimoine", hint:"Comptes, placements, liquidités", tab:"patrimoine"},
@@ -456,16 +468,26 @@ function GuideDemarrage({data,ghReady,go}){
     <span className={"w-6 h-6 rounded-lg flex items-center justify-center shrink-0 "+(s.fait?"bg-brand-500 text-white":"border-2 border-ink-200 text-transparent")}><Icon name="check" className="w-4 h-4" stroke={3}/></span>
     <span className="flex-1 min-w-0"><span className={"text-sm font-medium "+(s.fait?"text-ink-400 line-through":"text-ink-900")}>{s.label}</span><span className="block text-xs text-ink-400">{s.hint}</span></span>
     {!s.fait&&<span className="text-xs text-brand-700 font-medium shrink-0">Aller</span>}</button>);
-  return (<div className="card panel rounded-3xl p-5 sm:p-6">
-    <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={()=>setOpen(!open)}>
-      <div><h3 className="font-heading font-semibold text-ink-900">Par où commencer</h3>
-        <p className="text-xs text-ink-500 mt-0.5">{done===total?"L'essentiel est rempli. Continue d'alimenter chaque mois.":"Suis ces étapes pour bien démarrer ("+done+"/"+total+")."}</p></div>
-      <div className="flex items-center gap-3"><div className="w-24 h-2 rounded-full bg-ink-100 overflow-hidden hidden sm:block"><div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all" style={{width:(done/total*100)+"%"}}/></div><span className="text-ink-400">{open?"▾":"▸"}</span></div>
+  return (<div className="card panel rounded-3xl overflow-hidden">
+    <div className="p-5 sm:p-6 text-white relative overflow-hidden" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+      <div className="absolute -right-6 -bottom-10 opacity-15"><Snowflake className="w-36 h-36"/></div>
+      <div className="flex flex-wrap items-center justify-between gap-4 relative">
+        <div className="min-w-[220px]"><h3 className="font-heading text-xl font-bold flex items-center gap-2"><Icon name="check" className="w-5 h-5"/>Bien démarrer</h3>
+          <p className="text-brand-50 text-sm mt-1">Remplis ou mets à jour tout, étape par étape, avec l'assistant. Ou suis la liste ci-dessous.</p></div>
+        <button onClick={openAssistant} className="bg-white text-brand-700 font-semibold px-6 py-3 rounded-xl shadow hover:bg-brand-50 cursor-pointer whitespace-nowrap">Démarrer l'assistant</button>
+      </div>
     </div>
-    {open&&<div className="mt-3 grid md:grid-cols-2 gap-x-4 gap-y-1">
-      <div><div className="text-xs uppercase tracking-wide text-ink-400 px-2.5 mb-1">Essentiel</div>{ess.map((s,i)=><Row key={i} s={s}/>)}</div>
-      <div><div className="text-xs uppercase tracking-wide text-ink-400 px-2.5 mb-1 mt-3 md:mt-0">Si ça te concerne</div>{opt.map((s,i)=><Row key={i} s={s}/>)}</div>
-    </div>}
+    <div className="p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={()=>setOpen(!open)}>
+        <div><h4 className="font-heading font-semibold text-ink-900">Par où commencer</h4>
+          <p className="text-xs text-ink-500 mt-0.5">{done===total?"L'essentiel est rempli. Continue d'alimenter chaque mois.":"Suis ces étapes pour bien démarrer ("+done+"/"+total+")."}</p></div>
+        <div className="flex items-center gap-3"><div className="w-24 h-2 rounded-full bg-ink-100 overflow-hidden hidden sm:block"><div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all" style={{width:(done/total*100)+"%"}}/></div><span className="text-ink-400">{open?"▾":"▸"}</span></div>
+      </div>
+      {open&&<div className="mt-3 grid md:grid-cols-2 gap-x-4 gap-y-1">
+        <div><div className="text-xs uppercase tracking-wide text-ink-400 px-2.5 mb-1">Essentiel</div>{ess.map((s,i)=><Row key={i} s={s}/>)}</div>
+        <div><div className="text-xs uppercase tracking-wide text-ink-400 px-2.5 mb-1 mt-3 md:mt-0">Si ça te concerne</div>{opt.map((s,i)=><Row key={i} s={s}/>)}</div>
+      </div>}
+    </div>
   </div>);
 }
 
@@ -509,8 +531,7 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj,openAssistant}){
   const delAct=id=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).filter(a=>a.id!==id)}));
   const addAct=()=>setData(d=>({...d,actionsPerso:[...(d.actionsPerso||[]),{id:uid(),texte:"",fait:false}]}));
   return (<div className="space-y-5">
-    <AssistantBanner onStart={openAssistant}/>
-    <GuideDemarrage data={data} ghReady={ghReady} go={go}/>
+    <GuideDemarrage data={data} ghReady={ghReady} go={go} openAssistant={openAssistant}/>
     <SuiviMensuel data={data} setData={setData} go={go} ghMaj={ghMaj}/>
     <div className="grid lg:grid-cols-3 gap-4">
       <div className="lg:col-span-1"><KPIHero c={c}/></div>
@@ -667,7 +688,7 @@ function Patrimoine({data,setData,c,alloc,go,openAssistant}){
     <Conseils items={tips}/>
     <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit">{SUBS.map(([k,l])=><button key={k} onClick={()=>setSub(k)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition "+(sub===k?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}>{l}</button>)}</div>
     {sub==="financier"&&<div className="space-y-5">
-      <Card title="Mes actifs financiers" sub="Comptes, placements, liquidités. Clique sur la flèche pour les détails (facultatif)." right={<AddBtn onClick={addA}>Ajouter</AddBtn>}>
+      <Card title="Mes actifs financiers" sub="Comptes, placements, liquidités. Clique sur la flèche pour les détails (facultatif)." right={<AjouterMenu options={SUGG_PATRI.map(([label,classe])=>({label,pick:()=>addAsset(label,classe)}))} onBlank={addA}/>}>
         <div className="space-y-2">
           {data.patrimoine.map(a=>{const pv=n(a.prixRevient)>0?(n(a.montant)-n(a.prixRevient)):null; const det=detteFor(a.id); const o=open[a.id];return(
             <div key={a.id} className="rounded-2xl border border-ink-100">
@@ -866,7 +887,7 @@ function Bourse({data,setData}){
       <KPI label="Dividendes" value={fmtE(tot.div)+" / an"} tone="blue"/>
     </div>
     {parType.length>0&&<Card title="Répartition du portefeuille" sub="Par type de placement"><Donut data={parType}/></Card>}
-    <Card title="Mon portefeuille" sub="Pour chaque ligne : montant investi, valeur actuelle, dividendes annuels. Performance et rendement calculés." right={<AddBtn onClick={add}>Ajouter</AddBtn>}>
+    <Card title="Mon portefeuille" sub="Pour chaque ligne : montant investi, valeur actuelle, dividendes annuels. Performance et rendement calculés." right={<AjouterMenu options={SUGG_BOURSE.map(([label,type])=>({label,pick:()=>addNamed(label,type)}))} onBlank={add}/>}>
       {lignes.length===0&&<div className="text-sm text-ink-400 py-4 text-center">Ajoute ta première ligne (action, ETF, crypto...).</div>}
       <div className="space-y-2">
         <div className="hidden md:flex gap-2 text-xs text-ink-400 px-1"><div className="flex-1">Ligne</div><div className="w-28">Type</div><div className="w-28 text-right pr-7">Investi</div><div className="w-28 text-right pr-7">Valeur</div><div className="w-28 text-right pr-7">Dividendes/an</div><div className="w-16 text-right">Perf.</div><div className="w-8"/></div>
@@ -926,14 +947,14 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
         <span className="text-ink-500">Crédits <b className="text-red-500">{fmtE(c.mensuCredits)}</b></span>
         <span className="text-ink-500">Cashflow <b className="text-sky-600">{fmtE(c.cashflow)}</b></span></div></div></Card>
     <div className="grid md:grid-cols-2 gap-5 items-start">
-      <Card title="Revenus" right={<AddBtn onClick={()=>setMc("revenus",[...mc.revenus,{id:uid(),nom:"Nouveau revenu",montant:0,type:"passif"}])}>Ajouter</AddBtn>}>
+      <Card title="Revenus" right={<AjouterMenu options={SUGG_REV.map(([label,type])=>({label,pick:()=>addRevNamed(label,type)}))} onBlank={()=>setMc("revenus",[...mc.revenus,{id:uid(),nom:"Nouveau revenu",montant:0,type:"passif"}])}/>}>
         <div className="space-y-2">{mc.revenus.map(r=>(<div key={r.id} className="flex items-center gap-2">
           <div className="flex-1"><TextInput value={r.nom} onChange={v=>upd("revenus",r.id,{nom:v})}/></div>
           <select value={r.type} onChange={e=>upd("revenus",r.id,{type:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="actif">actif</option><option value="passif">passif</option></select>
           <Money value={r.montant} onChange={v=>upd("revenus",r.id,{montant:v})} className="w-28"/>
           <IconBtn name="x" onClick={()=>del("revenus",r.id)} title="Supprimer"/></div>))}</div>
         <Total label="Total revenus" v={c.revT}/></Card>
-      <Card title="Dépenses" right={<AddBtn onClick={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0}])}>Ajouter</AddBtn>}>
+      <Card title="Dépenses" right={<AjouterMenu options={SUGG_DEP.map(label=>({label,pick:()=>addDepNamed(label)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0}])}/>}>
         <div className="space-y-2">{mc.depenses.map(p=>(<div key={p.id} className="flex items-center gap-2">
           <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
           <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>

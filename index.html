@@ -84,6 +84,7 @@ const PATHS={
   home:"M3 11l9-8 9 8M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10M9 21v-6h6v6",
   wrench:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
   down:"M12 3v12M7 10l5 5 5-5M5 21h14", up:"M12 21V9M7 14l5-5 5 5M5 3h14", refresh:"M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15",
+  chevron:"M6 9l6 6 6-6", key:"M21 2l-2 2m-7.6 7.6a5 5 0 1 0-1.4 1.4l.7-.7 2.3 0 0-2.3 2-2 2.3 0 0-2.3 1.7-1.7",
 };
 function Icon({name,className="w-5 h-5",stroke=2}){
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}><path d={PATHS[name]}/></svg>;
@@ -116,6 +117,9 @@ function defaultData(){
       vrd:0, grosOeuvre:0, travauxNeufs:0, equipement:0, honoTech:0, raccordements:0, aleasPct:0.06,
       honoGestion:0, honoCompta:0, honoJustice:0, doPct:0, gfaPct:0,
       apport:0, emprunt:0, tauxEmprunt:0.07, fraisDossier:0, honoVentePct:0.04, lots:[{id:uid(),nom:"Lot 1",prix:0}] },
+    outilLocatif:{ regime:"lmnp", prix:0, notairePct:0.075, travaux:0, fraisAgence:0, mobilier:0,
+      loyerMensuel:0, taxeFonciere:0, coproAn:0, assurancePNO:0, gliPct:0, gestionPct:0, vacancePct:0.03, comptaAn:0,
+      apport:0, emprunt:0, tauxEmprunt:0.04, assEmprunteurPct:0.003, dureeAnnees:20, tmi:0.3 },
   };
 }
 let CAME_FROM_STORAGE=false;
@@ -124,6 +128,7 @@ function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.
     if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
     if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[]; if(!d.bourse)d.bourse=[]; if(!d.routine)d.routine={};
     if(!d.outilMdb)d.outilMdb={bienNeuf:false,achatTaxe:false,regimeOverride:"auto",tauxTVA:0.2,isReduit:true,dureeMois:12,prixAchat:0,fraisAcqPct:0.025,indemniteEviction:0,apporteur:0,vrd:0,grosOeuvre:0,travauxNeufs:0,equipement:0,honoTech:0,raccordements:0,aleasPct:0.06,honoGestion:0,honoCompta:0,honoJustice:0,doPct:0,gfaPct:0,apport:0,emprunt:0,tauxEmprunt:0.07,fraisDossier:0,honoVentePct:0.04,lots:[{id:uid(),nom:"Lot 1",prix:0}]};
+    if(!d.outilLocatif)d.outilLocatif={regime:"lmnp",prix:0,notairePct:0.075,travaux:0,fraisAgence:0,mobilier:0,loyerMensuel:0,taxeFonciere:0,coproAn:0,assurancePNO:0,gliPct:0,gestionPct:0,vacancePct:0.03,comptaAn:0,apport:0,emprunt:0,tauxEmprunt:0.04,assEmprunteurPct:0.003,dureeAnnees:20,tmi:0.3};
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
     return d; }} }catch(e){} return defaultData(); }
 
@@ -273,6 +278,7 @@ function MiniBars({items}){
 function App(){
   const [data,setData]=useState(loadData);
   const [tab,setTab]=useState("dashboard");
+  const [outil,setOutil]=useState("mdb");
   const [toast,setToast]=useState("");
   const [gh,setGh]=useState(loadGh);
   const [busy,setBusy]=useState("");
@@ -346,7 +352,7 @@ function App(){
     r.readAsText(f); };
 
   const tabs=[["dashboard","Tableau de bord","dashboard"],["patrimoine","Patrimoine","bank"],["cashflow","Cashflow","wallet"],
-    ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],["outils","Outils","wrench"],["reglages","Réglages","settings"]];
+    ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
 
   return (<div className="min-h-screen">
     <header className="max-w-6xl mx-auto px-4 pt-6 pb-2">
@@ -360,11 +366,14 @@ function App(){
       </div>
     </header>
     <nav className="max-w-6xl mx-auto px-4 sticky top-2 z-20">
-      <div className="frost rounded-2xl p-1.5 flex gap-1 overflow-x-auto shadow-sm">
-        {tabs.map(([id,label,icon])=>(<button key={id} onClick={()=>setTab(id)}
-          className={"flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition cursor-pointer "+
-            (tab===id?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:text-ink-900 hover:bg-ink-100")}>
-          <Icon name={icon} className="w-4 h-4"/>{label}</button>))}
+      <div className="frost rounded-2xl p-1.5 flex items-center gap-1 shadow-sm">
+        <div className="flex gap-1 overflow-x-auto flex-1">
+          {tabs.map(([id,label,icon])=>(<button key={id} onClick={()=>setTab(id)}
+            className={"flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition cursor-pointer "+
+              (tab===id?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:text-ink-900 hover:bg-ink-100")}>
+            <Icon name={icon} className="w-4 h-4"/>{label}</button>))}
+        </div>
+        <div className="shrink-0 pl-1 ml-1 border-l border-ink-200/70"><OutilsNav active={tab==="outils"} outil={outil} pick={k=>{setOutil(k);setTab("outils");}}/></div>
       </div>
     </nav>
     <main className="max-w-6xl mx-auto px-4 py-6">
@@ -374,7 +383,7 @@ function App(){
       {tab==="projection"&&<Projection data={data} setData={setData} c={c}/>}
       {tab==="suivi"&&<Suivi data={data} setData={setData} c={c} hist={histCashflow}/>}
       {tab==="objectifs"&&<Objectifs data={data} setData={setData} c={c}/>}
-      {tab==="outils"&&<Outils data={data} setData={setData}/>}
+      {tab==="outils"&&<Outils outil={outil} setOutil={setOutil} data={data} setData={setData}/>}
       {tab==="reglages"&&<Reglages data={data} setData={setData} setParam={setParam} doExport={doExport} fileRef={fileRef} doImport={doImport} flash={flash} gh={gh} setGh={setGh} busy={busy} sauver={ghSauver} restaurer={ghRestaurer} fetchFX={()=>fetchFX().then(ok=>flash(ok?"Taux mis à jour":"Hors ligne, taux inchangé"))}/>}
     </main>
     <footer className="max-w-6xl mx-auto px-4 pb-10 text-center text-xs text-ink-400">Données enregistrées sur cet appareil et, si configuré, sauvegardées sur GitHub (Réglages).</footer>
@@ -942,11 +951,47 @@ function bilanMdb(m, caMult, travMult){
   const resultat=caRef-coutTotal;
   const is=resultat<=0?0:(m.isReduit?0.15*Math.min(resultat,42500)+0.25*Math.max(0,resultat-42500):0.25*resultat);
   const net=resultat-is;
-  return {regime,recup,fraisAcq,foncier,travauxBrut,aleas,techniqueHT,coutTechnique,honoDivers,diversHorsTVA,CA,honoVente,fraisFin,margeTTC,tvaMarge,coutRevient:foncier+coutTechnique+coutHonoDivers+diversHorsTVA,coutTotal,resultat,is,net,
+  return {regime,recup,fraisAcq,foncier,travauxBrut,aleas,techniqueHT,coutTechnique,honoDivers,coutHonoDivers,coutHonoVente,caRef,diversHorsTVA,CA,honoVente,fraisFin,margeTTC,tvaMarge,coutRevient:foncier+coutTechnique+coutHonoDivers+diversHorsTVA,coutTotal,resultat,is,net,
     margeCA:CA?net/CA:0, roe:n(m.apport)?net/n(m.apport):null, rentAn:(n(m.apport)&&n(m.dureeMois))?(net/n(m.apport))*12/n(m.dureeMois):null};
 }
 const REGIME_LBL={total:"TVA sur le prix total",exoneration:"Exonération de TVA",marge:"TVA sur marge"};
-function Outils({data,setData}){
+const OUTILS=[{key:"mdb",nom:"Marchand de biens",icon:"bank",desc:"Achat-revente : marge nette après TVA et IS"},
+  {key:"locatif",nom:"Rentabilité locative",icon:"home",desc:"Cashflow et rendement d'un bien loué"}];
+/* Menu déroulant des outils, à droite de la navigation */
+function OutilsNav({active,outil,pick}){
+  const [open,setOpen]=useState(false);
+  return (<div className="relative">
+    <button onClick={()=>setOpen(o=>!o)} className={"flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition cursor-pointer "+(active?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:text-ink-900 hover:bg-ink-100")}>
+      <Icon name="wrench" className="w-4 h-4"/>Outils<Icon name="chevron" className={"w-3.5 h-3.5 transition-transform "+(open?"rotate-180":"")}/></button>
+    {open&&<><div className="fixed inset-0 z-20" onClick={()=>setOpen(false)}/>
+      <div className="absolute right-0 mt-2 z-30 w-72 bg-white border border-ink-200 rounded-2xl shadow-xl p-2">
+        <div className="text-xs uppercase tracking-wide text-ink-400 px-2 py-1.5">Choisis un outil</div>
+        {OUTILS.map(o=>(<button key={o.key} onClick={()=>{pick(o.key);setOpen(false);}} className={"w-full text-left px-2.5 py-2.5 rounded-xl flex items-start gap-3 cursor-pointer transition "+(active&&outil===o.key?"bg-brand-50":"hover:bg-ink-100")}>
+          <div className={"w-9 h-9 rounded-xl flex items-center justify-center shrink-0 "+(active&&outil===o.key?"bg-gradient-to-br from-brand-500 to-brand-700 text-white":"bg-ink-100 text-ink-500")}><Icon name={o.icon} className="w-5 h-5"/></div>
+          <div><div className="text-sm font-medium text-ink-800">{o.nom}</div><div className="text-xs text-ink-400 leading-snug">{o.desc}</div></div></button>))}
+      </div></>}
+  </div>);
+}
+/* Tableau type compte de résultat, lisible ligne à ligne */
+function PL({rows}){
+  return (<div className="rounded-2xl border border-ink-100 overflow-hidden">
+    {rows.filter(Boolean).map((r,i)=>(<div key={i} className={"flex items-center justify-between px-4 py-2.5 "+(r.sign==="="?"bg-ink-100/70 border-t border-ink-200":i%2?"bg-white":"bg-ink-50/40")}>
+      <span className={(r.sign==="="?"font-heading font-semibold text-ink-900":"text-ink-600")+" text-sm"}>{r.l}</span>
+      <span className={"num font-medium "+(r.tone==="red"?"text-red-500":r.tone==="brand"?"text-brand-700":r.sign==="="?"font-heading font-bold text-ink-900":"text-ink-800")}>{r.sign==="-"?"− ":r.sign==="+"?"+ ":""}{fmtE(r.sign==="="?n(r.v):Math.abs(n(r.v)))}</span>
+    </div>))}
+  </div>);
+}
+/* Dispatcher de l'onglet Outils */
+function Outils({outil,setOutil,data,setData}){
+  return (<div className="space-y-5">
+    <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit flex-wrap">
+      {OUTILS.map(o=>(<button key={o.key} onClick={()=>setOutil(o.key)} className={"px-4 py-2 rounded-xl text-sm font-medium cursor-pointer transition flex items-center gap-2 "+(outil===o.key?"bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow":"text-ink-500 hover:bg-ink-100")}><Icon name={o.icon} className="w-4 h-4"/>{o.nom}</button>))}
+    </div>
+    {outil==="mdb"&&<MdbTool data={data} setData={setData}/>}
+    {outil==="locatif"&&<LocatifTool data={data} setData={setData}/>}
+  </div>);
+}
+function MdbTool({data,setData}){
   const m=data.outilMdb||{};
   const set=(k,v)=>setData(d=>({...d,outilMdb:{...(d.outilMdb||{}),[k]:v}}));
   const updLot=(id,p)=>set("lots",(m.lots||[]).map(l=>l.id===id?{...l,...p}:l));
@@ -959,9 +1004,8 @@ function Outils({data,setData}){
   const E=({l,k,suffix="€"})=>(<Field label={l}><Money value={m[k]||0} onChange={v=>set(k,v)} suffix={suffix}/></Field>);
   const P=({l,k})=>(<Field label={l}><Pct value={m[k]||0} onChange={v=>set(k,v)}/></Field>);
   return (<div className="space-y-5">
-    <div className="panel rounded-2xl p-1.5 flex gap-1 w-fit"><button className="px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow cursor-default">Calculateur marchand de biens</button></div>
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <KPI label="Chiffre d'affaires" value={fmtE(r.CA)} icon="wrench"/>
+      <KPI label="Chiffre d'affaires" value={fmtE(r.CA)} icon="bank"/>
       <KPI label="Coût de revient total" value={fmtE(r.coutTotal)} tone="red"/>
       <KPI label="Bénéfice net (après IS)" value={fmtE(r.net)} tone={r.net>=0?"blue":"red"}/>
       <KPI label="Rentabilité / fonds propres" value={r.roe==null?"n.d.":fmtP(r.roe)} tone="blue"/>
@@ -1028,18 +1072,23 @@ function Outils({data,setData}){
       <div className="grid sm:grid-cols-2 gap-4 mt-3"><P l="Honoraires de vente (% du CA)" k="honoVentePct"/></div>
       <div className="flex justify-between mt-3 pt-3 border-t border-ink-200"><span className="font-heading font-semibold text-ink-700">Chiffre d'affaires</span><span className="font-heading font-bold text-brand-700">{fmtE(r.CA)}</span></div>
     </Card>
-    <Card title="Résultat de l'opération">
-      <div className="grid sm:grid-cols-2 gap-3 text-sm">
-        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Chiffre d'affaires</span><b>{fmtE(r.CA)}</b></div>
-        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Coût de revient total</span><b className="text-red-500">{fmtE(r.coutTotal)}</b></div>
-        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Marge brute (CA − acquisition)</span><b>{fmtE(r.margeTTC)}</b></div>
-        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">TVA due {r.regime==="marge"?"(sur marge)":""}</span><b>{fmtE(r.tvaMarge)}</b></div>
-        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Résultat avant impôt</span><b>{fmtE(r.resultat)}</b></div>
-        <div className="bg-ink-100/60 rounded-xl p-3 flex justify-between"><span className="text-ink-500">Impôt sur les sociétés</span><b className="text-red-500">{fmtE(r.is)}</b></div>
-      </div>
-      <div className="mt-3 rounded-2xl p-4 text-white flex flex-wrap items-center justify-between gap-3" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+    <Card title="Détail du calcul" sub="Du chiffre d'affaires au bénéfice net, ligne par ligne.">
+      <PL rows={[
+        {l:"Chiffre d'affaires (ventes)",v:r.CA,sign:"+",tone:"brand"},
+        r.regime==="total"&&{l:"TVA collectée reversée",v:r.CA-r.caRef,sign:"-"},
+        {l:"Prix de revient du foncier",v:r.foncier,sign:"-"},
+        {l:"Travaux et aléas"+(r.recup?" (HT)":" (TTC)"),v:r.coutTechnique,sign:"-"},
+        {l:"Honoraires et frais divers",v:r.coutHonoDivers+r.diversHorsTVA,sign:"-"},
+        {l:"Honoraires de vente",v:r.coutHonoVente,sign:"-"},
+        {l:"Frais financiers",v:r.fraisFin,sign:"-"},
+        r.tvaMarge>0&&{l:"TVA sur marge",v:r.tvaMarge,sign:"-"},
+        {l:"Résultat avant impôt",v:r.resultat,sign:"=",tone:r.resultat>=0?"":"red"},
+        {l:"Impôt sur les sociétés",v:r.is,sign:"-",tone:"red"},
+        {l:"Bénéfice net",v:r.net,sign:"=",tone:r.net>=0?"brand":"red"},
+      ]}/>
+      <div className="mt-4 rounded-2xl p-4 text-white flex flex-wrap items-center justify-between gap-3" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
         <div><div className="text-brand-50 text-sm">Bénéfice net (après IS)</div><div className="font-heading text-3xl font-bold">{fmtE(r.net)}</div></div>
-        <div className="text-right text-sm"><div>Marge nette / CA : <b>{fmtP(r.margeCA)}</b></div><div>Rentabilité fonds propres : <b>{r.roe==null?"n.d.":fmtP(r.roe)}</b></div><div>Rentabilité annualisée : <b>{r.rentAn==null?"n.d.":fmtP(r.rentAn)}</b></div></div>
+        <div className="text-right text-sm leading-relaxed"><div>Marge nette / CA : <b>{fmtP(r.margeCA)}</b></div><div>Rentabilité fonds propres : <b>{r.roe==null?"n.d.":fmtP(r.roe)}</b></div><div>Rentabilité annualisée : <b>{r.rentAn==null?"n.d.":fmtP(r.rentAn)}</b></div></div>
       </div>
     </Card>
     <Card title="Décision : marges de sécurité">
@@ -1050,6 +1099,131 @@ function Outils({data,setData}){
         <Mini label="Bénéfice si travaux +10%" v={fmtE(sTrav)} tone={sTrav>=0?"brand":"red"}/>
       </div>
       <p className="text-xs text-ink-400 mt-3">Repère : viser une marge nette d'au moins 8 à 12% du CA et garder de la marge si le prix de revente baisse ou si les travaux dérapent. La durée de portage pèse sur les frais financiers.</p>
+    </Card>
+  </div>);
+}
+
+/* Outils : simulateur de rentabilité locative (façon Horiz) */
+function mensualite(capital,tauxAnnuel,annees){
+  const N=Math.round(annees*12); if(N<=0)return 0; const t=tauxAnnuel/12;
+  if(!t) return capital/N;
+  return capital*t/(1-Math.pow(1+t,-N));
+}
+function bilanLocatif(m){
+  m=m||{};
+  const prix=n(m.prix),travaux=n(m.travaux),agence=n(m.fraisAgence),mobilier=n(m.mobilier);
+  const notaire=prix*n(m.notairePct);
+  const coutTotal=prix+notaire+travaux+agence+mobilier;
+  const loyerAn=n(m.loyerMensuel)*12, vac=n(m.vacancePct), loyerEff=loyerAn*(1-vac);
+  const gestion=loyerAn*n(m.gestionPct), gli=loyerAn*n(m.gliPct);
+  const charges=n(m.taxeFonciere)+n(m.coproAn)+n(m.assurancePNO)+gestion+gli+n(m.comptaAn);
+  const emprunt=n(m.emprunt), mCredit=mensualite(emprunt,n(m.tauxEmprunt),n(m.dureeAnnees));
+  const mAssur=emprunt*n(m.assEmprunteurPct)/12, mensualiteTot=mCredit+mAssur;
+  const interets1=emprunt*n(m.tauxEmprunt), capital1=Math.max(0,mCredit*12-interets1);
+  const amortBien=(prix*0.85+travaux)/30, amortMob=mobilier/8, amort=amortBien+amortMob;
+  const tmi=n(m.tmi), ps=0.172, reg=m.regime||"microfoncier";
+  let base=0, deficit=0;
+  if(reg==="microfoncier") base=loyerEff*0.7;
+  else if(reg==="microbic") base=loyerEff*0.5;
+  else if(reg==="reelfoncier") base=loyerEff-charges-interets1-mAssur*12;
+  else base=loyerEff-charges-interets1-mAssur*12-amort;
+  let impot=0;
+  if(base>0) impot=base*(tmi+ps); else { deficit=-base; }
+  const cashflowAn=loyerEff-charges-mensualiteTot*12-impot, cashflowMois=cashflowAn/12;
+  const enrichMois=cashflowMois+capital1/12;
+  const brut=coutTotal?loyerAn/coutTotal:0, net=coutTotal?(loyerEff-charges)/coutTotal:0, netnet=coutTotal?(loyerEff-charges-impot)/coutTotal:0;
+  const apport=n(m.apport), cashOnCash=apport?cashflowAn/apport:null;
+  return {prix,notaire,travaux,agence,mobilier,coutTotal,loyerAn,loyerEff,vac,gestion,gli,charges,emprunt,mCredit,mAssur,mensualiteTot,interets1,capital1,amort,amortBien,amortMob,base,impot,deficit,regime:reg,tmi,cashflowAn,cashflowMois,enrichMois,brut,net,netnet,cashOnCash,apport};
+}
+const LOCATIF_REG={microfoncier:"Nu · micro-foncier",reelfoncier:"Nu · régime réel",microbic:"Meublé · micro-BIC",lmnp:"Meublé · LMNP réel"};
+const LOCATIF_REG_DESC={
+  microfoncier:"Abattement forfaitaire de 30% sur les loyers, sans déduction de charges. Possible si moins de 15 000 € de loyers nus par an.",
+  reelfoncier:"Charges et intérêts d'emprunt déductibles. Un déficit foncier (hors intérêts) s'impute jusqu'à 10 700 € par an sur le revenu global.",
+  microbic:"Abattement forfaitaire de 50% sur les loyers. Pour la location meublée, sous le seuil de 77 700 € de recettes.",
+  lmnp:"Charges, intérêts et amortissement du bien déductibles. L'amortissement efface souvent l'impôt pendant des années sans créer de déficit."};
+const TMI_OPTS=[[0,"Non imposable (0%)"],[0.11,"11%"],[0.3,"30%"],[0.41,"41%"],[0.45,"45%"]];
+function LocatifTool({data,setData}){
+  const m=data.outilLocatif||{};
+  const set=(k,v)=>setData(d=>({...d,outilLocatif:{...(d.outilLocatif||{}),[k]:v}}));
+  const r=bilanLocatif(m);
+  const E=({l,k,suffix="€"})=>(<Field label={l}><Money value={m[k]||0} onChange={v=>set(k,v)} suffix={suffix}/></Field>);
+  const P=({l,k})=>(<Field label={l}><Pct value={m[k]||0} onChange={v=>set(k,v)}/></Field>);
+  const verdict = r.cashflowMois>=0&&r.netnet>=0.035 ? {t:"Bonne opération",c:"text-brand-700",d:"Cashflow positif et rendement net-net solide."}
+    : r.cashflowMois>=-150 ? {t:"Opération équilibrée",c:"text-sky-700",d:"Effort d'épargne modéré, le bien s'autofinance presque."}
+    : {t:"Effort d'épargne important",c:"text-amber-700",d:"Le bien coûte chaque mois ; à réserver à une forte conviction patrimoniale."};
+  return (<div className="space-y-5">
+    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <KPI label="Rentabilité brute" value={fmtP(r.brut)} icon="home"/>
+      <KPI label="Rentabilité nette" value={fmtP(r.net)} tone="blue"/>
+      <KPI label="Rentabilité nette-nette" value={fmtP(r.netnet)} tone="blue"/>
+      <KPI label="Cashflow mensuel" value={fmtE(r.cashflowMois)} tone={r.cashflowMois>=0?"blue":"red"}/>
+    </div>
+    <Card title="Le bien et son acquisition">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <E l="Prix d'achat" k="prix"/>
+        <P l="Frais de notaire (% du prix)" k="notairePct"/>
+        <E l="Travaux" k="travaux"/>
+        <E l="Frais d'agence" k="fraisAgence"/>
+        <E l="Mobilier (si meublé)" k="mobilier"/>
+      </div>
+      <div className="text-sm text-ink-500 mt-3">Frais de notaire {fmtE(r.notaire)} · <b className="text-ink-700">Coût total d'acquisition {fmtE(r.coutTotal)}</b></div>
+      <p className="text-xs text-ink-400 mt-1">Notaire : environ 7 à 8% dans l'ancien, 2 à 3% dans le neuf.</p>
+    </Card>
+    <div className="grid lg:grid-cols-2 gap-5 items-start">
+      <Card title="Loyer et charges">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <E l="Loyer mensuel (hors charges)" k="loyerMensuel"/>
+          <P l="Vacance et impayés (% du loyer)" k="vacancePct"/>
+          <E l="Taxe foncière (par an)" k="taxeFonciere"/>
+          <E l="Charges de copropriété (par an)" k="coproAn"/>
+          <E l="Assurance PNO (par an)" k="assurancePNO"/>
+          <E l="Comptable (par an)" k="comptaAn"/>
+          <P l="Gestion locative (% du loyer)" k="gestionPct"/>
+          <P l="Assurance loyers impayés (% du loyer)" k="gliPct"/>
+        </div>
+        <div className="text-sm text-ink-500 mt-3">Charges non récupérables : <b className="text-ink-700">{fmtE(r.charges)} / an</b></div>
+      </Card>
+      <Card title="Financement">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <E l="Apport / fonds propres" k="apport"/>
+          <E l="Montant emprunté" k="emprunt"/>
+          <P l="Taux d'intérêt annuel" k="tauxEmprunt"/>
+          <P l="Assurance emprunteur (% par an)" k="assEmprunteurPct"/>
+          <E l="Durée du prêt" k="dureeAnnees" suffix="ans"/>
+        </div>
+        <div className="text-sm text-ink-500 mt-3">Mensualité crédit + assurance : <b className="text-ink-700">{fmtE(r.mensualiteTot)} / mois</b> <span className="text-ink-400">dont {fmtE(r.capital1/12)} de capital la 1re année</span></div>
+      </Card>
+    </div>
+    <Card title="Fiscalité" sub="Le régime change fortement l'impôt, donc le cashflow net.">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="Régime fiscal"><select value={m.regime||"microfoncier"} onChange={e=>set("regime",e.target.value)} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm">{Object.entries(LOCATIF_REG).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
+        <Field label="Ta tranche marginale d'imposition"><select value={m.tmi==null?"0.3":String(m.tmi)} onChange={e=>set("tmi",n(e.target.value))} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm">{TMI_OPTS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></Field>
+      </div>
+      <div className="mt-3 text-sm rounded-2xl bg-sky-50 border border-sky-200 p-3 text-sky-800"><b>{LOCATIF_REG[r.regime]}.</b> {LOCATIF_REG_DESC[r.regime]}{r.regime==="lmnp"?" Amortissement estimé : "+fmtE(r.amort)+" / an.":""}</div>
+      {r.deficit>0&&r.regime==="reelfoncier"&&<div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">Déficit foncier de {fmtE(r.deficit)} : imputable jusqu'à 10 700 € par an sur ton revenu global (l'économie d'impôt n'est pas comptée ici, par prudence).</div>}
+    </Card>
+    <Card title="Du loyer au cashflow" sub="Sur une année pleine.">
+      <PL rows={[
+        {l:"Loyers encaissés (après vacance)",v:r.loyerEff,sign:"+",tone:"brand"},
+        {l:"Charges non récupérables",v:r.charges,sign:"-"},
+        {l:"Mensualités de crédit",v:r.mensualiteTot*12,sign:"-"},
+        {l:"Impôt et prélèvements sociaux",v:r.impot,sign:"-",tone:"red"},
+        {l:"Cashflow annuel",v:r.cashflowAn,sign:"=",tone:r.cashflowAn>=0?"brand":"red"},
+      ]}/>
+      <div className="mt-4 rounded-2xl p-4 text-white flex flex-wrap items-center justify-between gap-3" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+        <div><div className="text-brand-50 text-sm">Cashflow mensuel</div><div className="font-heading text-3xl font-bold">{fmtE(r.cashflowMois)}</div></div>
+        <div className="text-right text-sm leading-relaxed"><div>Enrichissement réel / mois : <b>{fmtE(r.enrichMois)}</b></div><div className="text-brand-50/90 text-xs">cashflow + capital remboursé par le locataire</div></div>
+      </div>
+    </Card>
+    <Card title="Lecture rapide">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Mini label="Rentabilité brute" v={fmtP(r.brut)}/>
+        <Mini label="Rentabilité nette-nette" v={fmtP(r.netnet)} tone={r.netnet>=0.035?"brand":"amber"}/>
+        <Mini label="Effort d'épargne / mois" v={r.cashflowMois<0?fmtE(-r.cashflowMois):"0 €"} tone={r.cashflowMois<0?"amber":"brand"}/>
+        <Mini label="Rendement sur apport" v={r.cashOnCash==null?"n.d.":fmtP(r.cashOnCash)} tone={r.cashOnCash>=0?"brand":"red"}/>
+      </div>
+      <div className={"mt-3 font-heading font-semibold "+verdict.c}>{verdict.t}</div>
+      <p className="text-xs text-ink-400 mt-1">{verdict.d} Repère : une rentabilité nette-nette au-dessus de 3,5 à 4% avec un cashflow proche de l'équilibre constitue une bonne base. L'enrichissement réel inclut le capital que ton locataire rembourse à ta place.</p>
     </Card>
   </div>);
 }

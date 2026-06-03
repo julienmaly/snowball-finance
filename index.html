@@ -107,7 +107,7 @@ function defaultData(){
       depenses:[ {id:uid(),nom:"Loyer",montant:0},{id:uid(),nom:"Alimentation",montant:0},{id:uid(),nom:"Eau",montant:0} ] } },
     suivi:[ {id:uid(),annee:new Date().getFullYear(),brut:0,dettes:0} ],
     biens:[], bourse:[],
-    snapshots:{}, actionsPerso:[],
+    snapshots:{}, actionsPerso:[], routine:{},
     jalons:[ {id:uid(),intitule:"Fonds d'urgence de 6 mois",categorie:"Sécurité",statut:"À faire"} ],
     projection:{ annee:new Date().getFullYear()+1, rendement:0.08, mensuel:Array.from({length:12},()=>({rev:0,dep:0})) },
   };
@@ -116,7 +116,7 @@ let CAME_FROM_STORAGE=false;
 function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.parse(s);
   if(d&&d.params){ CAME_FROM_STORAGE=true;
     if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
-    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[]; if(!d.bourse)d.bourse=[];
+    if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[]; if(!d.bourse)d.bourse=[]; if(!d.routine)d.routine={};
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
     return d; }} }catch(e){} return defaultData(); }
 
@@ -349,7 +349,7 @@ function App(){
       </div>
     </nav>
     <main className="max-w-6xl mx-auto px-4 py-6">
-      {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab} ghReady={ghReady}/>}
+      {tab==="dashboard"&&<Dashboard c={c} alloc={alloc} data={data} setData={setData} hist={histCashflow} go={setTab} ghReady={ghReady} ghMaj={gh.maj}/>}
       {tab==="patrimoine"&&<Patrimoine data={data} setData={setData} c={c} alloc={alloc}/>}
       {tab==="immobilier"&&<Immobilier data={data} setData={setData}/>}
       {tab==="bourse"&&<Bourse data={data} setData={setData}/>}
@@ -426,9 +426,11 @@ function GuideDemarrage({data,ghReady,go}){
     {fait:!!ghReady, label:"Active la sauvegarde GitHub", hint:"Pour ne jamais perdre tes données", tab:"reglages"},
   ];
   const opt=[
+    {fait:(data.dettes||[]).length>0, label:"Renseigne tes crédits", hint:"Mensualité et capital restant (Cashflow)", tab:"cashflow"},
     {fait:(data.biens||[]).length>0, label:"Ajoute tes biens immobiliers", hint:"Si tu possèdes de l'immobilier", tab:"immobilier"},
     {fait:(data.bourse||[]).length>0, label:"Ajoute ton portefeuille bourse", hint:"Actions, ETF, crypto", tab:"bourse"},
-    {fait:(data.jalons||[]).some(j=>j.statut==="Fait"||j.statut==="En cours"), label:"Fixe-toi des jalons", hint:"Tes objectifs de progression", tab:"objectifs"},
+    {fait:(data.suivi||[]).some(r=>n(r.brut)>0), label:"Renseigne ton historique", hint:"Tes années passées (Suivi)", tab:"suivi"},
+    {fait:(data.jalons||[]).some(j=>j.statut==="Fait"||j.statut==="En cours"), label:"Fixe-toi des objectifs", hint:"Tes objectifs de progression", tab:"objectifs"},
   ];
   const done=ess.filter(s=>s.fait).length, total=ess.length;
   const [open,setOpen]=useState(done<total);
@@ -449,8 +451,38 @@ function GuideDemarrage({data,ghReady,go}){
   </div>);
 }
 
+/* Suivi mensuel récurrent */
+function SuiviMensuel({data,setData,go,ghMaj}){
+  const ym=nowYM();
+  const r=(data.routine&&data.routine[ym])||{};
+  const toggle=k=>setData(d=>{const ro={...(d.routine||{})}; const cur={...(ro[ym]||{})}; cur[k]=!cur[k]; ro[ym]=cur; return {...d,routine:ro};});
+  const savedThisMonth=(ghMaj||"").slice(0,7)===ym;
+  const items=[
+    {k:"cashflow",fait:!!r.cashflow,label:"Mettre à jour mes revenus et dépenses",tab:"cashflow"},
+    {k:"patrimoine",fait:!!r.patrimoine,label:"Actualiser la valeur de mon patrimoine",tab:"patrimoine"},
+    {k:"credits",fait:!!r.credits,label:"Vérifier mes crédits (capital restant)",tab:"cashflow"},
+    {k:"actifs",fait:!!r.actifs,label:"Actualiser immobilier et bourse",tab:"immobilier"},
+    {k:"save",fait:savedThisMonth||!!r.save,label:"Sauvegarder sur GitHub",tab:"reglages",auto:savedThisMonth},
+  ];
+  const done=items.filter(i=>i.fait).length, total=items.length;
+  const [open,setOpen]=useState(done<total);
+  return (<div className="card panel rounded-3xl p-5 sm:p-6">
+    <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={()=>setOpen(!open)}>
+      <div className="flex items-center gap-2"><Icon name="trending" className="w-5 h-5 text-brand-600"/>
+        <div><h3 className="font-heading font-semibold text-ink-900">Mise à jour de {moisLong(ym)}</h3>
+        <p className="text-xs text-ink-500 mt-0.5">{done===total?"Tout est à jour pour ce mois. Reviens le mois prochain.":"Ce qu'il reste à actualiser ce mois ("+done+"/"+total+")."}</p></div></div>
+      <div className="flex items-center gap-3"><div className="w-24 h-2 rounded-full bg-ink-100 overflow-hidden hidden sm:block"><div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 transition-all" style={{width:(done/total*100)+"%"}}/></div><span className="text-ink-400">{open?"▾":"▸"}</span></div>
+    </div>
+    {open&&<div className="mt-3 space-y-1">{items.map(it=>(<div key={it.k} className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-ink-100 transition">
+      <button onClick={()=>!it.auto&&toggle(it.k)} disabled={it.auto} className={"w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition "+(it.fait?"bg-brand-500 text-white":"border-2 border-ink-200 text-transparent hover:border-brand-400")+(it.auto?"":" cursor-pointer")}><Icon name="check" className="w-4 h-4" stroke={3}/></button>
+      <span className={"flex-1 text-sm font-medium "+(it.fait?"text-ink-400 line-through":"text-ink-900")}>{it.label}{it.auto&&it.fait?" (fait)":""}</span>
+      <button onClick={()=>go(it.tab)} className="text-xs text-brand-700 font-medium hover:underline cursor-pointer shrink-0">Aller</button></div>))}
+      <p className="text-xs text-ink-400 px-2.5 pt-1">Coche au fur et à mesure. Le mois prochain, cette liste se réinitialise automatiquement.</p></div>}
+  </div>);
+}
+
 /* Tableau de bord */
-function Dashboard({c,alloc,data,setData,hist,go,ghReady}){
+function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj}){
   const reco=insights(c,data); const spark=hist.map(h=>h.cf);
   const avoirs=[...data.patrimoine].sort((a,b)=>n(b.montant)-n(a.montant));
   const acts=data.actionsPerso||[];
@@ -459,6 +491,7 @@ function Dashboard({c,alloc,data,setData,hist,go,ghReady}){
   const addAct=()=>setData(d=>({...d,actionsPerso:[...(d.actionsPerso||[]),{id:uid(),texte:"",fait:false}]}));
   return (<div className="space-y-5">
     <GuideDemarrage data={data} ghReady={ghReady} go={go}/>
+    <SuiviMensuel data={data} setData={setData} go={go} ghMaj={ghMaj}/>
     <div className="grid lg:grid-cols-3 gap-4">
       <div className="lg:col-span-1"><KPIHero c={c}/></div>
       <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4">

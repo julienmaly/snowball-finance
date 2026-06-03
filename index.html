@@ -347,13 +347,16 @@ function App(){
     const pvBourse=sum(bourse.filter(x=>n(x.investi)>0), x=>n(x.valeur)-n(x.investi));
     const pvLatente=pvFin+pvImmo+pvBourse;
     const netSur=net-pvLatente;
-    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,netSur,netSurUSD:netSur*eur,pctObjSur:objEUR?netSur/objEUR:0,resteSur:Math.max(0,objEUR-netSur),revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
+    // Disponible = argent réellement mobilisable : on retire l'immobilier (un bien n'est pas disponible) et la plus-value latente.
+    const reSur=sum(immoBiens,b=>coutRevient(b)-n(b.capital))+sum(data.patrimoine.filter(a=>a.classe==="Immobilier"),a=>n(a.prixRevient)>0?n(a.prixRevient):n(a.montant));
+    const dispo=netSur-reSur;
+    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,netSur,reSur,dispo,dispoUSD:dispo*eur,pctObjDispo:objEUR?dispo/objEUR:0,resteDispo:Math.max(0,objEUR-dispo),revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
       tauxEpargne:revT?cashflow/revT:0, objEUR, pctObj:objEUR?net/objEUR:0, reste:Math.max(0,objEUR-net),
       ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
   },[data,mc]);
 
-  useEffect(()=>{ const ym=nowYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.netSur) return d;
-    return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.netSur}}; }); },[c.netSur]);
+  useEffect(()=>{ const ym=nowYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.dispo) return d;
+    return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.dispo}}; }); },[c.dispo]);
 
   const alloc=useMemo(()=>{ const m={}; data.patrimoine.forEach(a=>{m[a.classe]=(m[a.classe]||0)+n(a.montant);});
     const immo=sum((data.biens||[]).filter(b=>b.usage==="RP"||b.usage==="Locatif"),b=>b.valeur); if(immo>0) m["Immobilier"]=(m["Immobilier"]||0)+immo;
@@ -380,7 +383,7 @@ function App(){
         </div>
         <div className="text-right leading-tight">
           <div className="text-xs text-ink-400 uppercase tracking-wide">Disponible</div>
-          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.netSur)}</div>
+          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.dispo)}</div>
           {c.pvLatente!==0&&<div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>Plus-value latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
         </div>
       </div>
@@ -415,17 +418,17 @@ function App(){
 
 /* KPI */
 function KPIHero({c}){
-  const v=useCountUp(c.netSur); const pct=Math.min(100,Math.max(0,c.pctObjSur*100));
+  const v=useCountUp(c.dispo); const pct=Math.min(100,Math.max(0,c.pctObjDispo*100));
   return (<div className="card rounded-3xl p-6 relative overflow-hidden text-white" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)",boxShadow:"0 18px 44px -22px rgba(3,80,130,.6)"}}>
     <div className="absolute -right-8 -top-8 opacity-15"><Snowflake className="w-40 h-40"/></div>
     <div className="text-brand-50 text-sm flex items-center gap-2"><Icon name="bank" className="w-4 h-4"/>Disponible</div>
     <div className="font-heading text-4xl font-extrabold mt-1">{fmtE(v)}</div>
-    <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.netSurUSD)}</div>
+    <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.dispoUSD)}</div>
     {c.pvLatente!==0&&<div className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium bg-white/20 rounded-full px-2.5 py-1">Plus-value latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
     <div className="mt-5">
-      <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObjSur)}</span></div>
+      <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObjDispo)}</span></div>
       <div className="h-2.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full rounded-full bg-white transition-all" style={{width:pct+"%"}}/></div>
-      <div className="text-xs text-brand-100 mt-1.5">Disponible {fmtE(c.netSur)} sur {fmtE(c.objEUR)}. Reste {fmtE(c.resteSur)}.</div>
+      <div className="text-xs text-brand-100 mt-1.5">Disponible {fmtE(c.dispo)} sur {fmtE(c.objEUR)}. Reste {fmtE(c.resteDispo)}.</div>
     </div></div>);
 }
 function KPI({label,value,sub,icon,tone="ink"}){
@@ -661,7 +664,9 @@ function AssistantGuide({data,setData,onClose}){
   const pvLat=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"),a=>n(a.montant)-n(a.prixRevient))
     +sum(biens.filter(b=>b.usage!=="MDB"&&coutRevient(b)>0),b=>n(b.valeur)-coutRevient(b))
     +sum(bourse.filter(x=>n(x.investi)>0),x=>n(x.valeur)-n(x.investi));
-  const titres=["Bienvenue","Comptes & liquidités","Immobilier","Investissements","Crédits","Revenus du mois","Dépenses du mois","Objectif"];
+  const reSurW=sum(biens.filter(b=>b.usage!=="MDB"),b=>coutRevient(b)-n(b.capital))+sum(data.patrimoine.filter(a=>a.classe==="Immobilier"),a=>n(a.prixRevient)>0?n(a.prixRevient):n(a.montant));
+  const dispoW=net-pvLat-reSurW;
+  const titres=["Bienvenue","Comptes & liquidités","Immobilier","Investissements","Crédits","Revenus du mois","Dépenses récurrentes","Objectif"];
   const dejaP=new Set(data.patrimoine.map(a=>(a.nom||"").toLowerCase())), dejaB=new Set(bourse.map(x=>(x.nom||"").toLowerCase()));
   return (<div className="fixed inset-0 z-50 bg-ink-900/40 flex items-start sm:items-center justify-center p-3 overflow-y-auto" style={{backdropFilter:"blur(4px)"}}>
     <div className="panel rounded-3xl w-full max-w-2xl my-6 p-5 sm:p-6">
@@ -693,15 +698,15 @@ function AssistantGuide({data,setData,onClose}){
         {e===4&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes crédits hors immobilier (conso, auto, etc.). Le crédit d'un bien immobilier se renseigne directement avec le bien (étape Immobilier), pour ne pas le compter deux fois.</div><button onClick={addCr} className="inline-flex items-center gap-1.5 text-sm text-brand-700 font-medium hover:underline cursor-pointer"><Icon name="plus" className="w-4 h-4"/>Ajouter un crédit</button>
           <div className="hidden sm:flex gap-2 text-xs text-ink-400 px-1"><div className="flex-1">Crédit</div><div className="w-24 text-right pr-2">Mensualité</div><div className="w-32 text-right pr-2">Capital restant</div><div className="w-8"/></div>
           <div className="space-y-2">{data.dettes.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updCr(x.id,{nom:v})} placeholder="Crédit"/></div><Money value={x.mensualite} onChange={v=>updCr(x.id,{mensualite:v})} className="w-24"/><Money value={x.montant} onChange={v=>updCr(x.id,{montant:v})} className="w-32"/><IconBtn name="x" onClick={()=>delCr(x.id)}/></div>))}</div></div>}
-        {e===5&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes revenus de ce mois ({moisLong(ym)}).</div><Chips options={SUGG_REV.map(([label,type])=>({label,has:dejaR.has(label.toLowerCase()),add:()=>addRev(label,type)}))}/>
+        {e===5&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes revenus de {moisLong(ym)}. À renseigner de préférence en fin de mois, une fois le salaire reçu.</div><Chips options={SUGG_REV.map(([label,type])=>({label,has:dejaR.has(label.toLowerCase()),add:()=>addRev(label,type)}))}/>
           <div className="space-y-2">{mc.revenus.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updRev(x.id,{nom:v})} placeholder="Revenu"/></div><select value={x.type} onChange={ev=>updRev(x.id,{type:ev.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="actif">actif</option><option value="passif">passif</option></select><Money value={x.montant} onChange={v=>updRev(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delRev(x.id)}/></div>))}</div></div>}
-        {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes dépenses de ce mois ({moisLong(ym)}).</div><Chips options={SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label)}))}/>
+        {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes dépenses récurrentes (celles qui reviennent chaque mois). C'est le levier de ton taux d'épargne.</div><Chips options={SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label)}))}/>
           <div className="space-y-2">{mc.depenses.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updDep(x.id,{nom:v})} placeholder="Dépense"/></div><Money value={x.montant} onChange={v=>updDep(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delDep(x.id)}/></div>))}</div></div>}
         {e===7&&<div className="space-y-3"><Field label="Mon objectif de patrimoine net (en €)"><Money value={data.params.objectifEUR} onChange={v=>setP("objectifEUR",v)}/></Field>
-          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton disponible est de <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<>, plus <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
+          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton disponible est de <b className="text-brand-700">{fmtE(dispoW)}</b>{pvLat!==0&&<>, plus <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
       </div>
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-ink-100">
-        <div className="text-sm text-ink-500">Disponible : <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<span className="hidden sm:inline"> · PV latente <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b></span>}</div>
+        <div className="text-sm text-ink-500">Disponible : <b className="text-brand-700">{fmtE(dispoW)}</b>{pvLat!==0&&<span className="hidden sm:inline"> · PV latente <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b></span>}</div>
         <div className="flex gap-2">{e>0&&<button onClick={()=>setE(e-1)} className="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-100 text-sm cursor-pointer">Précédent</button>}
           {e<titres.length-1?<button onClick={()=>setE(e+1)} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Suivant</button>
             :<button onClick={onClose} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Terminer</button>}</div>
@@ -740,7 +745,7 @@ function Patrimoine({data,setData,c,alloc,go,openAssistant}){
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <KPI label="Patrimoine brut" value={fmtE(c.brut)} icon="bank"/>
       <KPI label="Dettes" value={fmtE(c.dettesT)} tone="red"/>
-      <KPI label="Disponible" value={fmtE(c.netSur)} sub="hors plus-value latente" tone="blue"/>
+      <KPI label="Disponible" value={fmtE(c.dispo)} sub="hors immobilier et plus-value latente" tone="blue"/>
       <KPI label="Plus-value latente" value={fmtE(c.pvLatente)} tone={c.pvLatente>=0?"blue":"red"}/></div>
     <Card title="Allocation"><Donut data={alloc}/></Card>
     <Conseils items={tips}/>
@@ -1404,7 +1409,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
           <Money value={r.montant} onChange={v=>upd("revenus",r.id,{montant:v})} className="w-28"/>
           <IconBtn name="x" onClick={()=>del("revenus",r.id)} title="Supprimer"/></div>))}</div>
         <Total label="Total revenus" v={c.revT}/></Card>
-      <Card title="Dépenses" right={<AjouterMenu options={SUGG_DEP.map(label=>({label,pick:()=>addDepNamed(label)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0}])}/>}>
+      <Card title="Dépenses récurrentes" sub="Tes charges qui reviennent chaque mois (loyer, abonnements, courses, etc.). C'est ici que tu optimises ton taux d'épargne." right={<AjouterMenu options={SUGG_DEP.map(label=>({label,pick:()=>addDepNamed(label)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0}])}/>}>
         <div className="space-y-2">{mc.depenses.map(p=>(<div key={p.id} className="flex items-center gap-2">
           <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
           <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>

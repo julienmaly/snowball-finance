@@ -173,6 +173,8 @@ const GROUPES=[
 function groupeOf(nom){const l=(nom||"").toLowerCase(); for(const g of GROUPES){ if(g.k.some(k=>l.includes(k))) return g.nom;} return "Autres";}
 // Report d'un mois sur l'autre : on ne garde que le salaire dans les revenus (le reste, ponctuel, est remis a zero chaque mois).
 function carryRev(revs){ const r=revs||[]; const sal=r.filter(x=>(x.nom||"").toLowerCase().includes("salaire")); return sal.length?sal:r.filter(x=>x.type==="actif"); }
+// Cote depenses : on reporte les recurrentes (fixe + variable), pas les depenses ponctuelles (one-shot).
+function carryDep(deps){ return (deps||[]).filter(x=>(x.cat||"variable")!=="ponctuelle"); }
 
 /* projection multi-années partagée */
 function projeter(net, apportAnnuel, rdt, objEUR, ans){
@@ -319,7 +321,7 @@ function App(){
   useEffect(()=>{ setData(d=>{ const ym=nowYM(); if(d.mois[ym]) return {...d,moisActif:ym};
     const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
     const cl=a=>(a||[]).map(x=>({...x,id:uid()}));
-    return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(src.depenses)}}}; }); },[]);
+    return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(carryDep(src.depenses))}}}; }); },[]);
 
   /* taux EUR/USD auto */
   const fetchFX=()=>fetch('https://open.er-api.com/v6/latest/EUR').then(r=>r.json()).then(j=>{
@@ -488,7 +490,7 @@ function Chips({options}){
 }
 const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["Espèces","Liquidités"],["Compte à terme","Liquidités"],["Objets de valeur","Autres"]];
 const SUGG_REV=[["Salaire","actif"],["Prime / Bonus","actif"],["Activité indépendante","actif"],["Revenus locatifs","passif"],["Dividendes","passif"],["Intérêts","passif"],["Allocations / aides","actif"]];
-const SUGG_DEP=[["Loyer appartement","fixe"],["Électricité + Internet + Eau","fixe"],["Aide maison","fixe"],["Téléphone","fixe"],["Assurance maladie + habitation","fixe"],["Voiture (essence + assurance)","fixe"],["Crèche","fixe"],["Abonnements","fixe"],["Impôts","fixe"],["Alimentation","variable"],["Sorties","variable"],["Voyages","variable"],["Loisirs","variable"],["Vêtements / shopping","variable"],["Imprévus","variable"]];
+const SUGG_DEP=[["Loyer appartement","fixe"],["Électricité + Internet + Eau","fixe"],["Aide maison","fixe"],["Téléphone","fixe"],["Assurance maladie + habitation","fixe"],["Voiture (essence + assurance)","fixe"],["Crèche","fixe"],["Abonnements","fixe"],["Impôts","fixe"],["Alimentation","variable"],["Sorties","variable"],["Voyages","variable"],["Loisirs","variable"],["Vêtements / shopping","variable"],["Réparation / imprévu","ponctuelle"],["Gros achat exceptionnel","ponctuelle"]];
 const SUGG_BOURSE=[["ETF","ETF"],["Action","Action"],["Obligation","Obligation"],["Crypto","Crypto"],["Private Equity","Private Equity"],["PER","PER"],["Fonds","Fonds"],["SCPI","SCPI"],["Or / métaux","Or"]];
 function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length) return null;
   return (<Card title="Analyse" sub="Remarques générées automatiquement sur cette section">
@@ -1394,7 +1396,7 @@ function LocatifTool({data,setData}){
 /* Cashflow */
 function Cashflow({data,setData,mc,setMc,moisActif,c}){
   const changeMois=ym=>setData(d=>{ if(!d.mois[ym]){ const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
-      const cl=a=>a.map(x=>({...x,id:uid()})); return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(src.depenses)}}}; }
+      const cl=a=>a.map(x=>({...x,id:uid()})); return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(carryDep(src.depenses))}}}; }
     return {...d,moisActif:ym}; });
   const upd=(k,id,patch)=>setMc(k,mc[k].map(x=>x.id===id?{...x,...patch}:x));
   const del=(k,id)=>setMc(k,mc[k].filter(x=>x.id!==id));
@@ -1435,13 +1437,13 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
           <Money value={r.montant} onChange={v=>upd("revenus",r.id,{montant:v})} className="w-28"/>
           <IconBtn name="x" onClick={()=>del("revenus",r.id)} title="Supprimer"/></div>))}</div>
         <Total label="Total revenus" v={c.revT}/></Card>
-      <Card title="Dépenses récurrentes" sub="Classe chaque charge en fixe / variable. Le % indique son poids dans tes revenus ; les variables sont ton levier d'optimisation." right={<AjouterMenu options={SUGG_DEP.map(([label,cat])=>({label,pick:()=>addDepNamed(label,cat)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0,cat:"variable"}])}/>}>
-        {["fixe","variable"].map(cat=>{const lignes=mc.depenses.filter(p=>(p.cat||"variable")===cat); if(lignes.length===0)return null;
-          const stot=sum(lignes,x=>x.montant);
+      <Card title="Dépenses du mois" sub="Fixe ou variable = récurrent (reporté chaque mois). Ponctuelle = dépense exceptionnelle, comptée ce mois-ci seulement et non reportée. Le % indique le poids dans tes revenus." right={<AjouterMenu options={SUGG_DEP.map(([label,cat])=>({label,pick:()=>addDepNamed(label,cat)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0,cat:"variable"}])}/>}>
+        {["fixe","variable","ponctuelle"].map(cat=>{const lignes=mc.depenses.filter(p=>(p.cat||"variable")===cat); if(lignes.length===0)return null;
+          const stot=sum(lignes,x=>x.montant); const lbl=cat==="fixe"?"Coûts fixes":cat==="variable"?"Coûts variables":"Dépenses ponctuelles (ce mois)";
           return (<div key={cat} className="mb-3">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-ink-400 px-1 mb-1"><span>{cat==="fixe"?"Coûts fixes":"Coûts variables"}</span><span>{fmtE(stot)}{c.revT>0?" · "+Math.round(stot/c.revT*100)+"%":""}</span></div>
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-ink-400 px-1 mb-1"><span>{lbl}</span><span>{fmtE(stot)}{c.revT>0?" · "+Math.round(stot/c.revT*100)+"%":""}</span></div>
             <div className="space-y-2">{lignes.map(p=>(<div key={p.id} className="flex items-center gap-2">
-              <select value={p.cat||"variable"} onChange={e=>upd("depenses",p.id,{cat:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="fixe">Fixe</option><option value="variable">Variable</option></select>
+              <select value={p.cat||"variable"} onChange={e=>upd("depenses",p.id,{cat:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="fixe">Fixe</option><option value="variable">Variable</option><option value="ponctuelle">Ponctuelle</option></select>
               <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
               {c.revT>0&&n(p.montant)>0&&<span className="text-[11px] text-ink-400 shrink-0 w-10 text-right" title="part de tes revenus">{Math.round(n(p.montant)/c.revT*100)}%</span>}
               <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>

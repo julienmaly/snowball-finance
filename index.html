@@ -434,10 +434,10 @@ function AideRemplir({sub, groups}){
     {open&&<div className="mt-4 space-y-4">{groups.map((g,i)=>(<div key={i}>{g.titre&&<div className="text-xs uppercase tracking-wide text-ink-400 mb-2">{g.titre}</div>}<Chips options={g.options}/></div>))}</div>}
   </div>);
 }
-const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["Espèces","Liquidités"],["Compte à terme","Liquidités"],["Or / métaux","Autres"],["Objets de valeur","Autres"]];
+const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["Espèces","Liquidités"],["Compte à terme","Liquidités"],["Objets de valeur","Autres"]];
 const SUGG_REV=[["Salaire","actif"],["Prime / Bonus","actif"],["Activité indépendante","actif"],["Revenus locatifs","passif"],["Dividendes","passif"],["Intérêts","passif"],["Allocations / aides","actif"]];
 const SUGG_DEP=["Loyer / crédit","Électricité","Gaz","Eau","Internet","Téléphone","Alimentation","Transport","Voiture","Assurances","Santé / mutuelle","Crèche / école","Abonnements","Loisirs / sorties","Vêtements","Voyages","Impôts"];
-const SUGG_BOURSE=[["ETF","ETF"],["Action","Action"],["Obligation","Obligation"],["Crypto","Crypto"],["Private Equity","Private Equity"],["PER","PER"],["Fonds","Fonds"],["SCPI","SCPI"]];
+const SUGG_BOURSE=[["ETF","ETF"],["Action","Action"],["Obligation","Obligation"],["Crypto","Crypto"],["Private Equity","Private Equity"],["PER","PER"],["Fonds","Fonds"],["SCPI","SCPI"],["Or / métaux","Or"]];
 function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length) return null;
   return (<Card title="Analyse" sub="Remarques générées automatiquement sur cette section">
     <div className="space-y-2">{items.map((r,i)=>{const s=toneStyle[r.tone||"info"];return(
@@ -862,7 +862,7 @@ function Immobilier({data,setData}){
 }
 
 /* Bourse / Investissement */
-const BOURSE_TYPES=["Action","ETF","Obligation","Crypto","Private Equity","PER","Fonds","SCPI","Autre"];
+const BOURSE_TYPES=["Action","ETF","Obligation","Crypto","Private Equity","PER","Fonds","SCPI","Or","Autre"];
 function Bourse({data,setData}){
   const lignes=data.bourse||[];
   const upd=(id,p)=>setData(d=>({...d,bourse:(d.bourse||[]).map(x=>x.id===id?{...x,...p}:x)}));

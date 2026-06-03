@@ -381,8 +381,7 @@ function App(){
         <div className="text-right leading-tight">
           <div className="text-xs text-ink-400 uppercase tracking-wide">Patrimoine net</div>
           <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.netSur)}</div>
-          {c.pvLatente!==0&&<div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>+ PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
-          <div className="text-[11px] text-ink-400">= {fmtE(c.net)} au prix du marché</div>
+          {c.pvLatente!==0&&<div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>Plus-value latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
         </div>
       </div>
     </header>
@@ -422,7 +421,7 @@ function KPIHero({c}){
     <div className="text-brand-50 text-sm flex items-center gap-2"><Icon name="bank" className="w-4 h-4"/>Patrimoine net</div>
     <div className="font-heading text-4xl font-extrabold mt-1">{fmtE(v)}</div>
     <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.netSurUSD)}</div>
-    {c.pvLatente!==0&&<div className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium bg-white/20 rounded-full px-2.5 py-1">+ PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)} · {fmtE(c.net)} au prix du marché</div>}
+    {c.pvLatente!==0&&<div className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium bg-white/20 rounded-full px-2.5 py-1">Plus-value latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
     <div className="mt-5">
       <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObjSur)}</span></div>
       <div className="h-2.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full rounded-full bg-white transition-all" style={{width:pct+"%"}}/></div>
@@ -676,9 +675,19 @@ function AssistantGuide({data,setData,onClose}){
         {e===1&&<div className="space-y-3"><Chips options={SUGG_PATRI.map(([label,classe])=>({label,has:dejaP.has(label.toLowerCase()),add:()=>addAsset(label,classe)}))}/>
           <div className="space-y-2">{data.patrimoine.map(a=>(<div key={a.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={a.nom} onChange={v=>updA(a.id,{nom:v})} placeholder="Nom du compte"/></div><Money value={a.montant} onChange={v=>updA(a.id,{montant:v})} className="w-32"/><IconBtn name="x" onClick={()=>delA(a.id)}/></div>))}</div></div>}
         {e===2&&<div className="space-y-3"><Chips options={[{label:"Résidence principale",add:()=>addUsage("RP")},{label:"Bien locatif",add:()=>addUsage("Locatif")},{label:"Achat / revente",add:()=>addUsage("MDB")}]}/>
-          {biens.length>0&&<div className="hidden sm:flex gap-2 text-xs text-ink-400 px-1"><div className="flex-1">Bien</div><div className="w-32 text-right pr-2">Valeur actuelle</div><div className="w-32 text-right pr-2">Crédit restant</div><div className="w-8"/></div>}
-          <div className="space-y-2">{biens.map(b=>(<div key={b.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={b.nom} onChange={v=>updB(b.id,{nom:v})} placeholder="Nom du bien"/></div><Money value={b.valeur} onChange={v=>updB(b.id,{valeur:v})} className="w-32"/><Money value={b.capital} onChange={v=>updB(b.id,{capital:v})} className="w-32"/><IconBtn name="x" onClick={()=>delB(b.id)}/></div>))}</div>
-          <p className="text-xs text-ink-400"><b className="text-ink-600">Valeur actuelle</b> = ce que le bien vaut aujourd'hui, travaux finis (pas le prix d'achat). <b className="text-ink-600">Crédit restant</b> = le capital qu'il te reste à rembourser dessus. Tu pourras détailler prix d'achat, frais, travaux, loyers et fiscalité dans Patrimoine, sous-onglet Immobilier (la plus-value latente se calcule là-bas).</p></div>}
+          <div className="space-y-3">{biens.map(b=>(
+            <div key={b.id} className="rounded-2xl border border-ink-100 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1"><TextInput value={b.nom} onChange={v=>updB(b.id,{nom:v})} placeholder="Nom du bien"/></div>
+                <select value={b.usage} onChange={ev=>updB(b.id,{usage:ev.target.value})} className="text-sm rounded-xl border border-ink-200 py-2 px-2 text-ink-600 bg-white">{IMMO_MODES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+                <IconBtn name="x" onClick={()=>delB(b.id)}/>
+              </div>
+              <Acquisition b={b} upd={updB}/>
+              <div className="grid sm:grid-cols-2 gap-3"><ValeurEstimee b={b} upd={updB}/></div>
+              <CreditBien b={b} upd={updB}/>
+            </div>))}</div>
+          {biens.length===0&&<p className="text-sm text-ink-400">Ajoute un bien ci-dessus (résidence principale, locatif ou achat-revente).</p>}
+          <p className="text-xs text-ink-400">Renseigne le prix d'achat, les frais (notaire, agence), les travaux, la valeur estimée et le crédit. Les loyers, le rendement et la fiscalité se détaillent ensuite dans Patrimoine, sous-onglet Immobilier.</p></div>}
         {e===3&&<div className="space-y-3"><Chips options={SUGG_BOURSE.map(([label,type])=>({label,has:dejaB.has(label.toLowerCase()),add:()=>addBo(label,type)}))}/>
           <div className="space-y-2">{bourse.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updBo(x.id,{nom:v})} placeholder="Nom de la ligne"/></div><Money value={x.valeur} onChange={v=>updBo(x.id,{valeur:v})} className="w-32"/><IconBtn name="x" onClick={()=>delBo(x.id)}/></div>))}</div></div>}
         {e===4&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes crédits hors immobilier (conso, auto, etc.). Le crédit d'un bien immobilier se renseigne directement avec le bien (étape Immobilier), pour ne pas le compter deux fois.</div><button onClick={addCr} className="inline-flex items-center gap-1.5 text-sm text-brand-700 font-medium hover:underline cursor-pointer"><Icon name="plus" className="w-4 h-4"/>Ajouter un crédit</button>
@@ -689,7 +698,7 @@ function AssistantGuide({data,setData,onClose}){
         {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes dépenses de ce mois ({moisLong(ym)}).</div><Chips options={SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label)}))}/>
           <div className="space-y-2">{mc.depenses.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updDep(x.id,{nom:v})} placeholder="Dépense"/></div><Money value={x.montant} onChange={v=>updDep(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delDep(x.id)}/></div>))}</div></div>}
         {e===7&&<div className="space-y-3"><Field label="Mon objectif de patrimoine net (en €)"><Money value={data.params.objectifEUR} onChange={v=>setP("objectifEUR",v)}/></Field>
-          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net (sûr) est de <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<>, plus <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente (soit {fmtE(net)} au prix du marché)</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
+          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net est de <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<>, plus <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
       </div>
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-ink-100">
         <div className="text-sm text-ink-500">Patrimoine net : <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<span className="hidden sm:inline"> · PV latente <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b></span>}</div>

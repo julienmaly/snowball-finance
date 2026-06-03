@@ -346,13 +346,14 @@ function App(){
     const pvImmo=sum(immoBiens.filter(b=>coutRevient(b)>0), b=>n(b.valeur)-coutRevient(b));
     const pvBourse=sum(bourse.filter(x=>n(x.investi)>0), x=>n(x.valeur)-n(x.investi));
     const pvLatente=pvFin+pvImmo+pvBourse;
-    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
+    const netSur=net-pvLatente;
+    return { brut,financierBrut,immoValeur,immoDette,immoCf,bourseValeur,bourseDiv,dettesT,net,netUSD:net*eur,netSur,netSurUSD:netSur*eur,pctObjSur:objEUR?netSur/objEUR:0,resteSur:Math.max(0,objEUR-netSur),revT,revP,revA,depCourante,mensuCredits,depT,cash,cashflow,pvLatente,
       tauxEpargne:revT?cashflow/revT:0, objEUR, pctObj:objEUR?net/objEUR:0, reste:Math.max(0,objEUR-net),
       ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
   },[data,mc]);
 
-  useEffect(()=>{ const ym=nowYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.net) return d;
-    return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.net}}; }); },[c.net]);
+  useEffect(()=>{ const ym=nowYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.netSur) return d;
+    return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.netSur}}; }); },[c.netSur]);
 
   const alloc=useMemo(()=>{ const m={}; data.patrimoine.forEach(a=>{m[a.classe]=(m[a.classe]||0)+n(a.montant);});
     const immo=sum((data.biens||[]).filter(b=>b.usage==="RP"||b.usage==="Locatif"),b=>b.valeur); if(immo>0) m["Immobilier"]=(m["Immobilier"]||0)+immo;
@@ -379,9 +380,9 @@ function App(){
         </div>
         <div className="text-right leading-tight">
           <div className="text-xs text-ink-400 uppercase tracking-wide">Patrimoine net</div>
-          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.net)}</div>
-          <div className="text-[11px] text-ink-400 mt-0.5">brut {fmtEk(c.brut)} − dettes {fmtEk(c.dettesT)}</div>
-          <div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>
+          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.netSur)}</div>
+          {c.pvLatente!==0&&<div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>+ PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
+          <div className="text-[11px] text-ink-400">= {fmtE(c.net)} au prix du marché</div>
         </div>
       </div>
     </header>
@@ -415,17 +416,17 @@ function App(){
 
 /* KPI */
 function KPIHero({c}){
-  const v=useCountUp(c.net); const pct=Math.min(100,Math.max(0,c.pctObj*100));
+  const v=useCountUp(c.netSur); const pct=Math.min(100,Math.max(0,c.pctObjSur*100));
   return (<div className="card rounded-3xl p-6 relative overflow-hidden text-white" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)",boxShadow:"0 18px 44px -22px rgba(3,80,130,.6)"}}>
     <div className="absolute -right-8 -top-8 opacity-15"><Snowflake className="w-40 h-40"/></div>
     <div className="text-brand-50 text-sm flex items-center gap-2"><Icon name="bank" className="w-4 h-4"/>Patrimoine net</div>
     <div className="font-heading text-4xl font-extrabold mt-1">{fmtE(v)}</div>
-    <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.netUSD)}</div>
-    {c.pvLatente!==0&&<div className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium bg-white/20 rounded-full px-2.5 py-1">PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
+    <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.netSurUSD)}</div>
+    {c.pvLatente!==0&&<div className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium bg-white/20 rounded-full px-2.5 py-1">+ PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)} · {fmtE(c.net)} au prix du marché</div>}
     <div className="mt-5">
-      <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObj)}</span></div>
+      <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObjSur)}</span></div>
       <div className="h-2.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full rounded-full bg-white transition-all" style={{width:pct+"%"}}/></div>
-      <div className="text-xs text-brand-100 mt-1.5">Net {fmtE(c.net)} sur {fmtE(c.objEUR)}. Reste {fmtE(c.reste)}.</div>
+      <div className="text-xs text-brand-100 mt-1.5">Net sûr {fmtE(c.netSur)} sur {fmtE(c.objEUR)}. Reste {fmtE(c.resteSur)}.</div>
     </div></div>);
 }
 function KPI({label,value,sub,icon,tone="ink"}){
@@ -688,10 +689,10 @@ function AssistantGuide({data,setData,onClose}){
         {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes dépenses de ce mois ({moisLong(ym)}).</div><Chips options={SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label)}))}/>
           <div className="space-y-2">{mc.depenses.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updDep(x.id,{nom:v})} placeholder="Dépense"/></div><Money value={x.montant} onChange={v=>updDep(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delDep(x.id)}/></div>))}</div></div>}
         {e===7&&<div className="space-y-3"><Field label="Mon objectif de patrimoine net (en €)"><Money value={data.params.objectifEUR} onChange={v=>setP("objectifEUR",v)}/></Field>
-          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net est de <b className="text-brand-700">{fmtE(net)}</b>{pvLat!==0&&<>, dont <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
+          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net (sûr) est de <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<>, plus <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente (soit {fmtE(net)} au prix du marché)</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
       </div>
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-ink-100">
-        <div className="text-sm text-ink-500">Patrimoine net : <b className="text-brand-700">{fmtE(net)}</b>{pvLat!==0&&<span className="hidden sm:inline"> · PV latente <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b></span>}</div>
+        <div className="text-sm text-ink-500">Patrimoine net : <b className="text-brand-700">{fmtE(net-pvLat)}</b>{pvLat!==0&&<span className="hidden sm:inline"> · PV latente <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b></span>}</div>
         <div className="flex gap-2">{e>0&&<button onClick={()=>setE(e-1)} className="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-100 text-sm cursor-pointer">Précédent</button>}
           {e<titres.length-1?<button onClick={()=>setE(e+1)} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Suivant</button>
             :<button onClick={onClose} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Terminer</button>}</div>

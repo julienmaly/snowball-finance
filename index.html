@@ -483,16 +483,6 @@ function Chips({options}){
     <button key={i} onClick={o.add} className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-ink-200 bg-white text-ink-700 hover:border-brand-400 hover:bg-brand-50 cursor-pointer transition">
       <Icon name="plus" className="w-3.5 h-3.5" stroke={2.5}/>{o.label}</button>))}</div>);
 }
-function AideRemplir({sub, groups}){
-  const [open,setOpen]=useState(true);
-  return (<div className="card panel rounded-3xl p-5 sm:p-6">
-    <div className="flex items-center justify-between gap-3 cursor-pointer" onClick={()=>setOpen(!open)}>
-      <div className="flex items-center gap-2"><Icon name="check" className="w-5 h-5 text-brand-600"/>
-        <div><h3 className="font-heading font-semibold text-ink-900">Aide-moi à remplir</h3>{sub&&<p className="text-xs text-ink-500 mt-0.5">{sub}</p>}</div></div>
-      <span className="text-ink-400">{open?"▾":"▸"}</span></div>
-    {open&&<div className="mt-4 space-y-4">{groups.map((g,i)=>(<div key={i}>{g.titre&&<div className="text-xs uppercase tracking-wide text-ink-400 mb-2">{g.titre}</div>}<Chips options={g.options}/></div>))}</div>}
-  </div>);
-}
 const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["Espèces","Liquidités"],["Compte à terme","Liquidités"],["Objets de valeur","Autres"]];
 const SUGG_REV=[["Salaire","actif"],["Prime / Bonus","actif"],["Activité indépendante","actif"],["Revenus locatifs","passif"],["Dividendes","passif"],["Intérêts","passif"],["Allocations / aides","actif"]];
 const SUGG_DEP=[["Loyer appartement","fixe"],["Électricité + Internet + Eau","fixe"],["Aide maison","fixe"],["Téléphone","fixe"],["Assurance maladie + habitation","fixe"],["Voiture (essence + assurance)","fixe"],["Crèche","fixe"],["Abonnements","fixe"],["Impôts","fixe"],["Alimentation","variable"],["Sorties","variable"],["Voyages","variable"],["Loisirs","variable"],["Vêtements / shopping","variable"],["Imprévus","variable"]];
@@ -590,7 +580,6 @@ function SuiviMensuel({data,setData,go,ghMaj}){
 /* Tableau de bord */
 function Dashboard({c,alloc,data,setData,hist,go,ghReady,ghMaj,openAssistant}){
   const reco=insights(c,data); const spark=hist.map(h=>h.cf);
-  const avoirs=[...data.patrimoine].sort((a,b)=>n(b.montant)-n(a.montant));
   const snaps=Object.keys(data.snapshots||{}).sort(); const netSeries=snaps.map(k=>data.snapshots[k]);
   const acts=data.actionsPerso||[];
   const updAct=(id,p)=>setData(d=>({...d,actionsPerso:(d.actionsPerso||[]).map(a=>a.id===id?{...a,...p}:a)}));
@@ -1413,7 +1402,6 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
   const moisIdx=mois.indexOf(moisActif); const moisPrec=moisIdx>0?mois[moisIdx-1]:null;
   const depPrecList=moisPrec?((data.mois[moisPrec]||{}).depenses||[]):[];
   const depPrec=sum(depPrecList,x=>x.montant); const deltaDep=depPrec>0?(c.depCourante-depPrec)/depPrec:null;
-  const totFixe=sum(mc.depenses.filter(p=>(p.cat||"variable")==="fixe"),x=>x.montant); const totVar=c.depCourante-totFixe;
   const immoList=(data.biens||[]).filter(b=>b.usage==="RP"||b.usage==="Locatif");
   const groupes=(()=>{const m={}; GROUPES.forEach(g=>m[g.nom]={nom:g.nom,pct:g.pct,total:0}); m["Autres"]={nom:"Autres",pct:null,total:0};
     mc.depenses.forEach(p=>{m[groupeOf(p.nom)].total+=n(p.montant);});

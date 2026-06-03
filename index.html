@@ -85,6 +85,8 @@ const PATHS={
   wrench:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
   down:"M12 3v12M7 10l5 5 5-5M5 21h14", up:"M12 21V9M7 14l5-5 5 5M5 3h14", refresh:"M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15",
   chevron:"M6 9l6 6 6-6", key:"M21 2l-2 2m-7.6 7.6a5 5 0 1 0-1.4 1.4l.7-.7 2.3 0 0-2.3 2-2 2.3 0 0-2.3 1.7-1.7",
+  alert:"M10.3 4.3 1.8 18a1.5 1.5 0 0 0 1.3 2.2h17.8a1.5 1.5 0 0 0 1.3-2.2L13.7 4.3a1.5 1.5 0 0 0-2.6 0z M12 9v4 M12 17h.01",
+  info:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 16v-5 M12 8h.01",
 };
 function Icon({name,className="w-5 h-5",stroke=2}){
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}><path d={PATHS[name]}/></svg>;
@@ -981,6 +983,28 @@ function PL({rows}){
     </div>))}
   </div>);
 }
+/* Contrôleur en direct : audit qui tourne en parallèle des calculateurs */
+function Controleur({checks}){
+  const err=checks.filter(c=>c.level==="err").length, warn=checks.filter(c=>c.level==="warn").length;
+  const status = err? {t:err+" incohérence"+(err>1?"s":""), c:"bg-red-50 text-red-600 border-red-200", dot:"bg-red-500"}
+    : warn? {t:warn+" point"+(warn>1?"s":"")+" de vigilance", c:"bg-amber-50 text-amber-700 border-amber-200", dot:"bg-amber-500"}
+    : {t:"Tout est cohérent", c:"bg-brand-50 text-brand-700 border-brand-200", dot:"bg-brand-500"};
+  const ICON={ok:"check",warn:"alert",err:"x",info:"info"};
+  const COL={ok:"text-brand-600",warn:"text-amber-600",err:"text-red-500",info:"text-sky-500"};
+  return (<div className="card panel rounded-3xl p-5 sm:p-6 border-l-4 border-l-brand-400">
+    <div className="flex items-center gap-2 mb-3 flex-wrap">
+      <span className="relative flex h-2.5 w-2.5"><span className={"absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping "+status.dot}></span><span className={"relative inline-flex rounded-full h-2.5 w-2.5 "+status.dot}></span></span>
+      <h3 className="font-heading font-semibold text-ink-900">Contrôleur en direct</h3>
+      <span className={"ml-auto text-xs font-medium px-2.5 py-1 rounded-full border "+status.c}>{status.t}</span>
+    </div>
+    <div className="space-y-1.5">
+      {checks.map((c,i)=>(<div key={i} className="flex items-start gap-2 text-sm">
+        <Icon name={ICON[c.level]} className={"w-4 h-4 mt-0.5 shrink-0 "+COL[c.level]}/>
+        <span className="text-ink-600">{c.txt}</span></div>))}
+    </div>
+    <p className="text-xs text-ink-400 mt-3">Vérification relancée à chaque modification, en parallèle du calcul. Tout reste sur ton appareil.</p>
+  </div>);
+}
 /* Dispatcher de l'onglet Outils */
 function Outils({outil,setOutil,data,setData}){
   return (<div className="space-y-5">
@@ -990,6 +1014,30 @@ function Outils({outil,setOutil,data,setData}){
     {outil==="mdb"&&<MdbTool data={data} setData={setData}/>}
     {outil==="locatif"&&<LocatifTool data={data} setData={setData}/>}
   </div>);
+}
+function mdbChecks(m,r,pointMort){
+  const out=[]; const push=(level,txt)=>out.push({level,txt});
+  const recompo=r.foncier+r.coutTechnique+r.coutHonoDivers+r.diversHorsTVA+r.coutHonoVente+r.fraisFin+r.tvaMarge+r.resultat;
+  const equil=Math.abs(r.caRef-recompo)<1;
+  push(equil?"ok":"err", equil?"Comptes équilibrés : chiffre d'affaires = coûts + résultat avant impôt.":"Incohérence comptable dans la décomposition du résultat.");
+  const besoin=r.foncier+r.coutTechnique, ressources=n(m.apport)+n(m.emprunt);
+  if(besoin>0){ if(ressources+1<besoin) push("warn","Le financement (apport + emprunt) ne couvre pas l'achat et les travaux : manque "+fmtE(besoin-ressources)+".");
+    else push("ok","Le financement couvre l'achat et les travaux."); }
+  if(r.CA>0){ if(r.net<0) push("err","Opération à perte : bénéfice net négatif ("+fmtE(r.net)+").");
+    else if(r.margeCA<0.08) push("warn","Marge nette faible ("+fmtP(r.margeCA)+" du CA, repère 8 à 12%) : peu de sécurité.");
+    else push("ok","Marge nette confortable ("+fmtP(r.margeCA)+" du CA)."); }
+  if(pointMort!=null&&r.CA>0){ const marge=(r.CA-pointMort)/r.CA;
+    if(marge<0.1) push("warn","Faible sécurité : le prix de revente ne peut baisser que de "+fmtP(marge)+" avant la perte.");
+    else push("ok","Marge de sécurité sur le prix de revente : "+fmtP(marge)+"."); }
+  if(r.regime==="marge"&&(m.lots||[]).length>1) push("info","TVA sur marge avec plusieurs lots : en cas de division parcellaire, l'administration peut la refuser.");
+  if(n(m.dureeMois)>24) push("warn","Portage long ("+n(m.dureeMois)+" mois) : les frais financiers pèsent lourd ("+fmtE(r.fraisFin)+").");
+  if(r.travauxBrut>0&&n(m.aleasPct)<0.05) push("info","Provision pour aléas faible ("+fmtP(n(m.aleasPct))+") : un budget travaux dérape souvent de 10 à 15%.");
+  if(n(m.prixAchat)>0){ const fp=n(m.fraisAcqPct);
+    if(fp<0.02) push("info","Frais d'acquisition bas ("+fmtP(fp)+") : vérifie l'éligibilité à l'engagement de revendre.");
+    else if(fp>0.09) push("info","Frais d'acquisition élevés ("+fmtP(fp)+") pour une opération marchand de biens."); }
+  if(m.isReduit&&r.resultat>42500) push("info","IS réduit : 15% seulement jusqu'à 42 500 € de bénéfice, 25% au-delà.");
+  if(r.CA===0) push("info","Renseigne les prix de revente des lots pour lancer le calcul.");
+  return out;
 }
 function MdbTool({data,setData}){
   const m=data.outilMdb||{};
@@ -1010,6 +1058,7 @@ function MdbTool({data,setData}){
       <KPI label="Bénéfice net (après IS)" value={fmtE(r.net)} tone={r.net>=0?"blue":"red"}/>
       <KPI label="Rentabilité / fonds propres" value={r.roe==null?"n.d.":fmtP(r.roe)} tone="blue"/>
     </div>
+    <Controleur checks={mdbChecks(m,r,pointMort)}/>
     <Card title="Paramètres de l'opération" sub="Le régime de TVA découle de la nature du bien et de l'achat (modifiable).">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Field label="Durée de portage (mois)"><Money value={m.dureeMois||0} onChange={v=>set("dureeMois",v)} suffix="m"/></Field>
@@ -1142,6 +1191,29 @@ const LOCATIF_REG_DESC={
   microbic:"Abattement forfaitaire de 50% sur les loyers. Pour la location meublée, sous le seuil de 77 700 € de recettes.",
   lmnp:"Charges, intérêts et amortissement du bien déductibles. L'amortissement efface souvent l'impôt pendant des années sans créer de déficit."};
 const TMI_OPTS=[[0,"Non imposable (0%)"],[0.11,"11%"],[0.3,"30%"],[0.41,"41%"],[0.45,"45%"]];
+function locatifChecks(m,r){
+  const out=[]; const push=(level,txt)=>out.push({level,txt});
+  const equil=Math.abs(r.cashflowAn-(r.loyerEff-r.charges-r.mensualiteTot*12-r.impot))<1;
+  push(equil?"ok":"err", equil?"Comptes équilibrés : cashflow = loyers − charges − crédit − impôt.":"Incohérence dans le calcul du cashflow.");
+  if(r.coutTotal>0){ const res=n(m.apport)+n(m.emprunt);
+    if(res+1<r.coutTotal) push("warn","Apport + emprunt ne couvrent pas le coût total : manque "+fmtE(r.coutTotal-res)+".");
+    else if(res>r.coutTotal+1) push("info","Financement supérieur au coût total de "+fmtE(res-r.coutTotal)+" : apport peut-être surestimé.");
+    else push("ok","Le financement couvre le coût total de l'opération."); }
+  if(r.loyerAn>0){ if(r.netnet<0) push("err","Rentabilité nette-nette négative : charges et impôt dépassent les loyers.");
+    else if(r.netnet<0.035) push("warn","Rentabilité nette-nette faible ("+fmtP(r.netnet)+", repère > 3,5 à 4%).");
+    else push("ok","Rentabilité nette-nette correcte ("+fmtP(r.netnet)+")."); }
+  if(r.loyerAn>0){ if(r.cashflowMois<0) push("warn","Cashflow négatif : effort d'épargne de "+fmtE(-r.cashflowMois)+" par mois.");
+    else push("ok","Cashflow positif : "+fmtE(r.cashflowMois)+" par mois."); }
+  if(r.coutTotal>0&&r.loyerAn>0&&r.brut<0.03) push("info","Rendement brut bas ("+fmtP(r.brut)+") : loyer faible par rapport au prix.");
+  if(r.regime==="microfoncier"&&r.loyerAn>15000) push("warn","Micro-foncier non applicable au-delà de 15 000 € de loyers nus par an : passe au régime réel.");
+  if(r.regime==="microbic"&&r.loyerAn>77700) push("warn","Micro-BIC non applicable au-delà de 77 700 € de recettes : passe au LMNP réel.");
+  if((r.regime==="microbic"||r.regime==="lmnp")&&n(m.mobilier)===0) push("info","Location meublée : pense à valoriser le mobilier (requis, et amortissable en LMNP réel).");
+  if(r.mensualiteTot>0&&n(m.loyerMensuel)>0&&r.mensualiteTot>n(m.loyerMensuel)) push("info","La mensualité ("+fmtE(r.mensualiteTot)+") dépasse le loyer ("+fmtE(n(m.loyerMensuel))+") : autofinancement difficile.");
+  if(r.loyerAn>0&&n(m.vacancePct)===0) push("info","Aucune vacance ni impayé provisionnés : prévois 3 à 8% par prudence.");
+  if(n(m.prix)>0&&n(m.notairePct)<0.03) push("info","Frais de notaire bas ("+fmtP(n(m.notairePct))+") : plutôt cohérent avec du neuf.");
+  if(r.loyerAn===0) push("info","Renseigne le loyer mensuel pour lancer le calcul.");
+  return out;
+}
 function LocatifTool({data,setData}){
   const m=data.outilLocatif||{};
   const set=(k,v)=>setData(d=>({...d,outilLocatif:{...(d.outilLocatif||{}),[k]:v}}));
@@ -1158,6 +1230,7 @@ function LocatifTool({data,setData}){
       <KPI label="Rentabilité nette-nette" value={fmtP(r.netnet)} tone="blue"/>
       <KPI label="Cashflow mensuel" value={fmtE(r.cashflowMois)} tone={r.cashflowMois>=0?"blue":"red"}/>
     </div>
+    <Controleur checks={locatifChecks(m,r)}/>
     <Card title="Le bien et son acquisition">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <E l="Prix d'achat" k="prix"/>

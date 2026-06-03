@@ -129,6 +129,7 @@ function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.
   if(d&&d.params){ CAME_FROM_STORAGE=true;
     if(d.params.objectifEUR==null) d.params.objectifEUR=Math.round((d.params.objectifUSD||1000000)/(d.params.eurusd||1.08));
     if(!d.snapshots)d.snapshots={}; if(!d.actionsPerso)d.actionsPerso=[]; if(!d.biens)d.biens=[]; if(!d.bourse)d.bourse=[]; if(!d.routine)d.routine={};
+    d.biens.forEach(b=>{ if(b.fraisNotaire==null&&b.fraisAgence==null){ b.fraisNotaire=n(b.fraisAcq); b.fraisAgence=0; } if(b.fraisCredit==null)b.fraisCredit=0; });
     if(!d.outilMdb)d.outilMdb={bienNeuf:false,achatTaxe:false,regimeOverride:"auto",tauxTVA:0.2,isReduit:true,dureeMois:12,prixAchat:0,fraisAcqPct:0.025,indemniteEviction:0,apporteur:0,vrd:0,grosOeuvre:0,travauxNeufs:0,equipement:0,honoTech:0,raccordements:0,aleasPct:0.06,honoGestion:0,honoCompta:0,honoJustice:0,doPct:0,gfaPct:0,apport:0,emprunt:0,tauxEmprunt:0.07,fraisDossier:0,honoVentePct:0.04,lots:[{id:uid(),nom:"Lot 1",prix:0}]};
     if(!d.outilLocatif)d.outilLocatif={regime:"lmnp",prix:0,notairePct:0.075,travaux:0,fraisAgence:0,mobilier:0,loyerMensuel:0,taxeFonciere:0,coproAn:0,assurancePNO:0,gliPct:0,gestionPct:0,vacancePct:0.03,comptaAn:0,apport:0,emprunt:0,tauxEmprunt:0.04,assEmprunteurPct:0.003,dureeAnnees:20,tmi:0.3};
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
@@ -420,6 +421,7 @@ function KPIHero({c}){
     <div className="text-brand-50 text-sm flex items-center gap-2"><Icon name="bank" className="w-4 h-4"/>Patrimoine net</div>
     <div className="font-heading text-4xl font-extrabold mt-1">{fmtE(v)}</div>
     <div className="text-brand-100 text-sm mt-0.5">soit environ {fmtUSD(c.netUSD)}</div>
+    {c.pvLatente!==0&&<div className="inline-flex items-center gap-1 mt-1.5 text-xs font-medium bg-white/20 rounded-full px-2.5 py-1">PV latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
     <div className="mt-5">
       <div className="flex justify-between text-sm text-brand-50 mb-1.5"><span>Objectif : {fmtE(c.objEUR)}</span><span className="font-semibold text-white">{fmtP(c.pctObj)}</span></div>
       <div className="h-2.5 rounded-full bg-white/25 overflow-hidden"><div className="h-full rounded-full bg-white transition-all" style={{width:pct+"%"}}/></div>
@@ -633,7 +635,7 @@ function AssistantGuide({data,setData,onClose}){
   const addAsset=(nom,classe)=>setData(d=>({...d,patrimoine:[...d.patrimoine,{id:uid(),nom,etablissement:"",pays:"",montant:0,prixRevient:0,classe}]}));
   const updA=(id,p)=>setData(d=>({...d,patrimoine:d.patrimoine.map(a=>a.id===id?{...a,...p}:a)}));
   const delA=id=>setData(d=>({...d,patrimoine:d.patrimoine.filter(a=>a.id!==id)}));
-  const addUsage=u=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Opération":"Bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
+  const addUsage=u=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Opération":"Bien",prixAchat:0,fraisNotaire:0,fraisAgence:0,fraisCredit:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
   const updB=(id,p)=>setData(d=>({...d,biens:(d.biens||[]).map(b=>b.id===id?{...b,...p}:b)}));
   const delB=id=>setData(d=>({...d,biens:(d.biens||[]).filter(b=>b.id!==id)}));
   const addBo=(nom,type)=>setData(d=>({...d,bourse:[...(d.bourse||[]),{id:uid(),nom,type,investi:0,valeur:0,dividendes:0}]}));
@@ -656,6 +658,9 @@ function AssistantGuide({data,setData,onClose}){
   const brut=sum(data.patrimoine,a=>a.montant)+sum(biens.filter(b=>b.usage!=="MDB"),b=>b.valeur)+sum(bourse,x=>x.valeur);
   const dettesT=sum(data.dettes,x=>x.montant)+sum(biens.filter(b=>b.usage!=="MDB"),b=>b.capital);
   const net=brut-dettesT;
+  const pvLat=sum(data.patrimoine.filter(a=>n(a.prixRevient)>0&&a.classe!=="Liquidités"),a=>n(a.montant)-n(a.prixRevient))
+    +sum(biens.filter(b=>b.usage!=="MDB"&&coutRevient(b)>0),b=>n(b.valeur)-coutRevient(b))
+    +sum(bourse.filter(x=>n(x.investi)>0),x=>n(x.valeur)-n(x.investi));
   const titres=["Bienvenue","Comptes & liquidités","Immobilier","Investissements","Crédits","Revenus du mois","Dépenses du mois","Objectif"];
   const dejaP=new Set(data.patrimoine.map(a=>(a.nom||"").toLowerCase())), dejaB=new Set(bourse.map(x=>(x.nom||"").toLowerCase()));
   return (<div className="fixed inset-0 z-50 bg-ink-900/40 flex items-start sm:items-center justify-center p-3 overflow-y-auto" style={{backdropFilter:"blur(4px)"}}>
@@ -683,10 +688,10 @@ function AssistantGuide({data,setData,onClose}){
         {e===6&&<div className="space-y-3"><div className="text-sm text-ink-500">Tes dépenses de ce mois ({moisLong(ym)}).</div><Chips options={SUGG_DEP.map(label=>({label,has:dejaD.has(label.toLowerCase()),add:()=>addDep(label)}))}/>
           <div className="space-y-2">{mc.depenses.map(x=>(<div key={x.id} className="flex items-center gap-2"><div className="flex-1"><TextInput value={x.nom} onChange={v=>updDep(x.id,{nom:v})} placeholder="Dépense"/></div><Money value={x.montant} onChange={v=>updDep(x.id,{montant:v})} className="w-28"/><IconBtn name="x" onClick={()=>delDep(x.id)}/></div>))}</div></div>}
         {e===7&&<div className="space-y-3"><Field label="Mon objectif de patrimoine net (en €)"><Money value={data.params.objectifEUR} onChange={v=>setP("objectifEUR",v)}/></Field>
-          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net est de <b className="text-brand-700">{fmtE(net)}</b>. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
+          <div className="rounded-2xl bg-brand-50 border border-brand-200 p-4 text-sm text-ink-700">C'est tout bon. Ton patrimoine net est de <b className="text-brand-700">{fmtE(net)}</b>{pvLat!==0&&<>, dont <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b> de plus-value latente</>}. Pense à activer la sauvegarde GitHub dans Réglages pour ne rien perdre.</div></div>}
       </div>
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-ink-100">
-        <div className="text-sm text-ink-500">Patrimoine net : <b className="text-brand-700">{fmtE(net)}</b></div>
+        <div className="text-sm text-ink-500">Patrimoine net : <b className="text-brand-700">{fmtE(net)}</b>{pvLat!==0&&<span className="hidden sm:inline"> · PV latente <b className={pvLat>=0?"text-brand-600":"text-red-500"}>{pvLat>=0?"+":""}{fmtE(pvLat)}</b></span>}</div>
         <div className="flex gap-2">{e>0&&<button onClick={()=>setE(e-1)} className="px-4 py-2 rounded-xl border border-ink-200 text-ink-700 hover:bg-ink-100 text-sm cursor-pointer">Précédent</button>}
           {e<titres.length-1?<button onClick={()=>setE(e+1)} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Suivant</button>
             :<button onClick={onClose} className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium cursor-pointer">Terminer</button>}</div>
@@ -764,21 +769,34 @@ function Patrimoine({data,setData,c,alloc,go,openAssistant}){
 
 /* Immobilier (3 modes : RP / Locatif / MDB) */
 const IMMO_MODES=[["RP","Résidence principale"],["Locatif","Locatif"],["MDB","Achat / revente"]];
-function coutRevient(b){ return n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux); }
+function coutRevient(b){ return n(b.prixAchat)+n(b.fraisNotaire)+n(b.fraisAgence)+n(b.travaux); }
 function Acquisition({b,upd}){
-  return (<div className="grid sm:grid-cols-3 gap-3">
-    <Field label="Prix d'achat (net vendeur)"><Money value={b.prixAchat} onChange={v=>upd(b.id,{prixAchat:v})}/></Field>
-    <Field label="Frais d'acquisition (notaire, agence)"><Money value={b.fraisAcq} onChange={v=>upd(b.id,{fraisAcq:v})}/></Field>
-    <Field label="Travaux (cumul, à mettre à jour)"><Money value={b.travaux} onChange={v=>upd(b.id,{travaux:v})}/></Field>
+  return (<div>
+    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <Field label="Prix d'achat (net vendeur)"><Money value={b.prixAchat} onChange={v=>upd(b.id,{prixAchat:v})}/></Field>
+      <Field label="Frais de notaire"><Money value={b.fraisNotaire} onChange={v=>upd(b.id,{fraisNotaire:v})}/></Field>
+      <Field label="Frais d'agence"><Money value={b.fraisAgence} onChange={v=>upd(b.id,{fraisAgence:v})}/></Field>
+      <Field label="Travaux (cumul, à mettre à jour)"><Money value={b.travaux} onChange={v=>upd(b.id,{travaux:v})}/></Field>
+    </div>
+    <p className="text-xs text-ink-400 mt-2">Repère : notaire environ 7 à 8% du prix dans l'ancien (2 à 3% dans le neuf), agence souvent 3 à 6%. Coût de revient (achat + frais + travaux) : <b className="text-ink-600">{fmtE(coutRevient(b))}</b>.</p>
   </div>);
+}
+function ValeurEstimee({b,upd}){
+  const cr=coutRevient(b);
+  return (<Field label="Valeur actuelle estimée">
+    <Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})}/>
+    <div className="flex items-center gap-2 mt-1 flex-wrap"><span className="text-xs text-ink-400">Une estimation au prix du marché suffit.</span>
+      {cr>0&&<button onClick={()=>upd(b.id,{valeur:cr})} className="text-xs text-brand-700 hover:underline cursor-pointer">utiliser le coût de revient ({fmtE(cr)})</button>}</div>
+  </Field>);
 }
 function CreditBien({b,upd}){
   return (<div className="rounded-2xl bg-ink-50/70 border border-ink-100 p-3">
     <div className="text-sm font-medium text-ink-700 mb-2">Dette liée à ce bien <span className="text-xs font-normal text-ink-400">· crédit immobilier (laisse à 0 si le bien est payé)</span></div>
-    <div className="grid sm:grid-cols-3 gap-3">
+    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
       <Field label="Capital restant dû"><Money value={b.capital} onChange={v=>upd(b.id,{capital:v})}/></Field>
       <Field label="Mensualité"><Money value={b.mensualite} onChange={v=>upd(b.id,{mensualite:v})}/></Field>
       <Field label="Taux d'intérêt"><Pct value={b.taux} onChange={v=>upd(b.id,{taux:v})}/></Field>
+      <Field label="Frais de dossier / garantie"><Money value={b.fraisCredit} onChange={v=>upd(b.id,{fraisCredit:v})}/></Field>
     </div>
   </div>);
 }
@@ -789,8 +807,8 @@ function Immobilier({data,setData}){
   const list=biens.filter(b=>(b.usage||"RP")===mode);
   const upd=(id,p)=>setData(d=>({...d,biens:(d.biens||[]).map(b=>b.id===id?{...b,...p}:b)}));
   const del=id=>setData(d=>({...d,biens:(d.biens||[]).filter(b=>b.id!==id)}));
-  const add=()=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:mode,nom:"Nouveau bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
-  const addUsage=u=>{ setMode(u); setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Nouvelle opération":"Nouveau bien",prixAchat:0,fraisAcq:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]})); };
+  const add=()=>setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:mode,nom:"Nouveau bien",prixAchat:0,fraisNotaire:0,fraisAgence:0,fraisCredit:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]}));
+  const addUsage=u=>{ setMode(u); setData(d=>({...d,biens:[...(d.biens||[]),{id:uid(),usage:u,nom:u==="MDB"?"Nouvelle opération":"Nouveau bien",prixAchat:0,fraisNotaire:0,fraisAgence:0,fraisCredit:0,travaux:0,valeur:0,loyer:0,charges:0,taxe:0,vacance:0,capital:0,mensualite:0,taux:0.03,prixRevente:0,portageMois:0,dureeMois:6,fraisRevente:0,tauxIS:0.25}]})); };
   const mc=data.mois[data.moisActif]||{depenses:[]};
   const logementMois=sum(mc.depenses.filter(p=>groupeOf(p.nom)==="Logement"),x=>x.montant);
 
@@ -798,8 +816,8 @@ function Immobilier({data,setData}){
     return {cr, occ, pv:n(b.valeur)-cr, equity:n(b.valeur)-n(b.capital),
       rdtBrut:cr>0?loyerAn/cr:0, rdtNet:cr>0?(loyerAn-n(b.charges)*12-n(b.taxe))/cr:0,
       cfMois:n(b.loyer)*occ-n(b.charges)-n(b.taxe)/12-n(b.mensualite)};};
-  const calcMdb=b=>{const portage=n(b.portageMois)*n(b.dureeMois), coutTot=n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux)+portage+n(b.fraisRevente);
-    const margeBrute=n(b.prixRevente)-n(b.prixAchat)-n(b.fraisAcq)-n(b.travaux), margeNet=n(b.prixRevente)-coutTot, is=Math.max(0,margeNet*n(b.tauxIS)), net=margeNet-is;
+  const calcMdb=b=>{const fa=n(b.fraisNotaire)+n(b.fraisAgence), portage=n(b.portageMois)*n(b.dureeMois), coutTot=n(b.prixAchat)+fa+n(b.travaux)+portage+n(b.fraisRevente);
+    const margeBrute=n(b.prixRevente)-n(b.prixAchat)-fa-n(b.travaux), margeNet=n(b.prixRevente)-coutTot, is=Math.max(0,margeNet*n(b.tauxIS)), net=margeNet-is;
     return {portage,coutTot,margeBrute,margeNet,is,net, roi:coutTot>0?net/coutTot:0, roiAn:n(b.dureeMois)>0?(coutTot>0?net/coutTot:0)*12/n(b.dureeMois):0};};
 
   let kpis=[];
@@ -807,7 +825,7 @@ function Immobilier({data,setData}){
     kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Coût de revient",fmtE(t.cr),null,"ink"],["Plus-value latente",fmtE(t.val-t.cr),null,(t.val-t.cr)>=0?"blue":"red"],["Valeur nette",fmtE(t.val-t.cap),null,"blue"]]; }
   else if(mode==="Locatif"){ const t=list.reduce((s,b)=>{const c=calcLoc(b);s.val+=n(b.valeur);s.cf+=c.cfMois;s.pv+=c.pv;s.loyerAn+=n(b.loyer)*12*c.occ;s.net+=(n(b.loyer)*12*c.occ-n(b.charges)*12-n(b.taxe));s.cr+=c.cr;return s;},{val:0,cf:0,pv:0,loyerAn:0,net:0,cr:0});
     kpis=[["Valeur des biens",fmtE(t.val),"home","blue"],["Cashflow locatif",fmtE(t.cf)+" / mois",null,t.cf>=0?"blue":"red"],["Rendement net moyen",fmtP(t.cr>0?t.net/t.cr:0),null,"blue"],["Plus-value latente",fmtE(t.pv),null,t.pv>=0?"blue":"red"]]; }
-  else { const t=list.reduce((s,b)=>{const c=calcMdb(b);s.eng+=n(b.prixAchat)+n(b.fraisAcq)+n(b.travaux);s.rev+=n(b.prixRevente);s.net+=c.net;return s;},{eng:0,rev:0,net:0});
+  else { const t=list.reduce((s,b)=>{const c=calcMdb(b);s.eng+=n(b.prixAchat)+n(b.fraisNotaire)+n(b.fraisAgence)+n(b.travaux);s.rev+=n(b.prixRevente);s.net+=c.net;return s;},{eng:0,rev:0,net:0});
     kpis=[["Capital engagé",fmtE(t.eng),null,"ink"],["Revente estimée",fmtE(t.rev),null,"blue"],["Marge nette estimée",fmtE(t.net),null,t.net>=0?"blue":"red"],["Opérations",list.length,null,"ink"]]; }
 
   const tips=[];
@@ -842,7 +860,7 @@ function Immobilier({data,setData}){
             <Acquisition b={b} upd={upd}/>
             {mode==="RP"&&<>
               <div className="grid sm:grid-cols-3 gap-3">
-                <Field label="Valeur actuelle (estimation)"><Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})}/></Field>
+                <ValeurEstimee b={b} upd={upd}/>
               </div>
               <CreditBien b={b} upd={upd}/>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -855,7 +873,7 @@ function Immobilier({data,setData}){
             </>}
             {mode==="Locatif"&&(()=>{const c=calcLoc(b);return(<>
               <div className="grid sm:grid-cols-3 gap-3">
-                <Field label="Valeur actuelle (estimation)"><Money value={b.valeur} onChange={v=>upd(b.id,{valeur:v})}/></Field>
+                <ValeurEstimee b={b} upd={upd}/>
                 <Field label="Loyer perçu hors charges (mensuel)"><Money value={b.loyer} onChange={v=>upd(b.id,{loyer:v})}/></Field>
                 <Field label="Charges non récupérables (mensuel)"><Money value={b.charges} onChange={v=>upd(b.id,{charges:v})}/></Field>
                 <Field label="Taxe foncière (annuelle)"><Money value={b.taxe} onChange={v=>upd(b.id,{taxe:v})}/></Field>

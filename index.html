@@ -264,13 +264,14 @@ function App(){
   const flash=m=>{ setToast(m); setTimeout(()=>setToast(""),2600); };
   const ghReady=gh.token&&gh.owner&&gh.repo&&gh.path;
   const ghSauver=async()=>{ if(!ghReady){flash("Configure GitHub dans Réglages");return;} setBusy("save");
-    try{ const cur=await ghGet(gh); await ghPut(gh,JSON.stringify(data,null,2),cur.sha); setSavedSnap(JSON.stringify(data)); setGh(s=>({...s,maj:new Date().toISOString().slice(0,16).replace("T"," ")})); flash("Sauvegardé sur GitHub"); }
+    try{ const payload={...data,updatedAt:Date.now()}; const cur=await ghGet(gh); await ghPut(gh,JSON.stringify(payload,null,2),cur.sha); setData(payload); setSavedSnap(JSON.stringify(payload)); setGh(s=>({...s,maj:new Date().toISOString().slice(0,16).replace("T"," ")})); flash("Sauvegardé sur GitHub"); }
     catch(e){ flash("Échec sauvegarde : "+e.message); } setBusy(""); };
   const ghRestaurer=async()=>{ if(!ghReady){flash("Configure GitHub dans Réglages");return;} setBusy("load");
     try{ const cur=await ghGet(gh); if(cur&&cur.content){const d=JSON.parse(cur.content); if(d&&d.params){setData(d);setSavedSnap(JSON.stringify(d));flash("Données restaurées depuis GitHub");}else flash("Sauvegarde invalide");} else flash("Aucune sauvegarde trouvée"); }
     catch(e){ flash("Échec restauration : "+e.message); } setBusy(""); };
   useEffect(()=>{ setSavedSnap(JSON.stringify(data)); const g=loadGh();
-    if(!CAME_FROM_STORAGE && g.token&&g.owner&&g.repo&&g.path){ ghGet(g).then(r=>{if(r&&r.content){const d=JSON.parse(r.content); if(d&&d.params){setData(d);setSavedSnap(JSON.stringify(d));flash("Données chargées depuis GitHub");}}}).catch(()=>{}); } },[]);
+    if(g.token&&g.owner&&g.repo&&g.path){ ghGet(g).then(r=>{ if(r&&r.content){ const d=JSON.parse(r.content);
+      if(d&&d.params && (!CAME_FROM_STORAGE || n(d.updatedAt)>n(data.updatedAt))){ setData(d); setSavedSnap(JSON.stringify(d)); flash("Données synchronisées depuis GitHub"); } } }).catch(()=>{}); } },[]);
   const dirty = ghReady && savedSnap && JSON.stringify(data)!==savedSnap;
 
   /* ouverture : mois en cours */
@@ -995,7 +996,7 @@ function Reglages({data,setData,setParam,doExport,fileRef,doImport,fetchFX,flash
         <button onClick={restaurer} disabled={busy} className="inline-flex items-center gap-2 bg-white border border-brand-300 text-brand-700 hover:bg-brand-50 disabled:opacity-50 px-4 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer"><Icon name="down" className="w-4 h-4"/>{busy==="load"?"Restauration…":"Restaurer depuis GitHub"}</button>
         {gh.maj&&<span className="text-xs text-ink-400">Dernière sauvegarde : {gh.maj}</span>}
       </div>
-      <p className="text-xs text-ink-400 mt-3">Le jeton reste sur cet appareil (jamais partagé). Crée un jeton « fine-grained » limité à ce repo, permission Contents en lecture/écriture. Sur un nouvel appareil : renseigne les mêmes champs puis « Restaurer ».</p>
+      <p className="text-xs text-ink-400 mt-3">Le jeton reste sur cet appareil (jamais partagé). Crée un jeton « fine-grained » limité à ce repo, permission Contents en lecture/écriture. Sur tes autres appareils (ordi, téléphone) : renseigne les mêmes champs (compte, repo, fichier, jeton) et tes données se <b>synchronisent automatiquement</b> à l'ouverture (la version la plus récente l'emporte). Pense à « Sauvegarder » après chaque session.</p>
     </Card>
     <Card title="Sauvegarde locale (fichier)" sub="En complément : un export manuel à garder chez toi.">
       <div className="flex flex-wrap gap-3">

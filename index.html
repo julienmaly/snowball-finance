@@ -375,17 +375,28 @@ function App(){
     ["suivi","Suivi","trending"],["projection","Projection","chart"],["objectifs","Objectifs","target"],["reglages","Réglages","settings"]];
 
   return (<div className="min-h-screen">
-    <header className="max-w-6xl mx-auto px-4 pt-6 pb-2">
-      <div className="flex items-start gap-3 flex-wrap">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 text-white flex items-center justify-center shadow-lg shadow-brand-500/25"><Snowflake/></div>
-        <div className="flex-1 min-w-[220px] flex items-center">
-          <h1 className="font-heading text-2xl font-bold text-ink-900 leading-tight">Snowball <span className="text-brand-600">Finance</span></h1>
+    <header className="max-w-6xl mx-auto px-4 pt-6 pb-3">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 text-white flex items-center justify-center shadow-lg shadow-brand-500/25 shrink-0"><Snowflake/></div>
+          <div>
+            <h1 className="font-heading text-xl font-bold text-ink-900 leading-none">Snowball <span className="text-brand-600">Finance</span></h1>
+            <p className="text-xs text-ink-400 mt-1">Pilotage de patrimoine</p>
+          </div>
         </div>
-        <div className="text-right leading-tight">
-          <div className="text-xs text-ink-400 uppercase tracking-wide">Disponible</div>
-          <div className="font-heading text-2xl font-bold text-brand-700">{fmtE(c.dispo)}</div>
-          {c.pvLatente!==0&&<div className={"text-[11px] font-medium "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>+ plus-value latente {c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>}
-          {c.pvLatente!==0&&<div className="mt-1"><span className="inline-block text-[11px] font-medium text-ink-600 bg-ink-100 rounded-full px-2.5 py-0.5">Total projeté {fmtE(c.dispo+c.pvLatente)}</span></div>}
+        <div className="flex items-stretch gap-2 flex-wrap">
+          <div className="rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-white px-4 py-2 shadow-sm shadow-brand-500/25 min-w-[110px]">
+            <div className="text-[10px] uppercase tracking-wide text-brand-50/80">Disponible</div>
+            <div className="font-heading text-xl font-bold leading-tight">{fmtE(c.dispo)}</div>
+          </div>
+          {c.pvLatente!==0&&<div className="rounded-2xl border border-ink-200 bg-white/80 px-4 py-2 min-w-[110px]">
+            <div className="text-[10px] uppercase tracking-wide text-ink-400">Plus-value latente</div>
+            <div className={"font-heading text-xl font-bold leading-tight "+(c.pvLatente>=0?"text-brand-600":"text-red-500")}>{c.pvLatente>=0?"+":""}{fmtE(c.pvLatente)}</div>
+          </div>}
+          {c.pvLatente!==0&&<div className="rounded-2xl border border-ink-200 bg-white/80 px-4 py-2 min-w-[110px]">
+            <div className="text-[10px] uppercase tracking-wide text-ink-400">Total projeté</div>
+            <div className="font-heading text-xl font-bold leading-tight text-ink-800">{fmtE(c.dispo+c.pvLatente)}</div>
+          </div>}
         </div>
       </div>
     </header>
@@ -483,7 +494,7 @@ function AideRemplir({sub, groups}){
 }
 const SUGG_PATRI=[["Compte courant","Liquidités"],["Livret / épargne","Liquidités"],["Assurance vie","Liquidités"],["Espèces","Liquidités"],["Compte à terme","Liquidités"],["Objets de valeur","Autres"]];
 const SUGG_REV=[["Salaire","actif"],["Prime / Bonus","actif"],["Activité indépendante","actif"],["Revenus locatifs","passif"],["Dividendes","passif"],["Intérêts","passif"],["Allocations / aides","actif"]];
-const SUGG_DEP=[["Loyer / crédit logement","fixe"],["Charges & copropriété","fixe"],["Électricité","fixe"],["Gaz","fixe"],["Eau","fixe"],["Internet","fixe"],["Téléphone","fixe"],["Assurances","fixe"],["Santé / mutuelle","fixe"],["Abonnements","fixe"],["Transport","fixe"],["Crèche / école","fixe"],["Impôts","fixe"],["Alimentation / courses","variable"],["Restaurants & sorties","variable"],["Carburant","variable"],["Vêtements / shopping","variable"],["Loisirs","variable"],["Voyages","variable"],["Imprévus","variable"]];
+const SUGG_DEP=[["Loyer appartement","fixe"],["Électricité + Internet + Eau","fixe"],["Aide maison","fixe"],["Téléphone","fixe"],["Assurance maladie + habitation","fixe"],["Voiture (essence + assurance)","fixe"],["Crèche","fixe"],["Abonnements","fixe"],["Impôts","fixe"],["Alimentation","variable"],["Sorties","variable"],["Voyages","variable"],["Loisirs","variable"],["Vêtements / shopping","variable"],["Imprévus","variable"]];
 const SUGG_BOURSE=[["ETF","ETF"],["Action","Action"],["Obligation","Obligation"],["Crypto","Crypto"],["Private Equity","Private Equity"],["PER","PER"],["Fonds","Fonds"],["SCPI","SCPI"],["Or / métaux","Or"]];
 function Conseils({items}){ items=(items||[]).filter(Boolean); if(!items.length) return null;
   return (<Card title="Analyse" sub="Remarques générées automatiquement sur cette section">
@@ -1423,19 +1434,22 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
           <Money value={r.montant} onChange={v=>upd("revenus",r.id,{montant:v})} className="w-28"/>
           <IconBtn name="x" onClick={()=>del("revenus",r.id)} title="Supprimer"/></div>))}</div>
         <Total label="Total revenus" v={c.revT}/></Card>
-      <Card title="Dépenses récurrentes" sub="Charges qui reviennent chaque mois. Classe-les en fixe / variable : les variables sont ton levier d'optimisation. Le % indique l'évolution par rapport au mois précédent." right={<AjouterMenu options={SUGG_DEP.map(([label,cat])=>({label,pick:()=>addDepNamed(label,cat)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0,cat:"variable"}])}/>}>
-        <div className="space-y-2">{mc.depenses.map(p=>{
-          const prev=depPrecList.find(q=>(q.nom||"").toLowerCase()===(p.nom||"").toLowerCase());
-          const dlt=prev&&n(prev.montant)>0?(n(p.montant)-n(prev.montant))/n(prev.montant):null;
-          return (<div key={p.id} className="flex items-center gap-2">
-          <select value={p.cat||"variable"} onChange={e=>upd("depenses",p.id,{cat:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="fixe">Fixe</option><option value="variable">Variable</option></select>
-          <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
-          {dlt!=null&&<span title="vs mois dernier" className={"text-[11px] font-medium shrink-0 w-14 text-right "+(dlt>0.001?"text-red-500":dlt<-0.001?"text-brand-600":"text-ink-400")}>{dlt>0?"+":""}{fmtP(dlt)}</span>}
-          <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>
-          <IconBtn name="x" onClick={()=>del("depenses",p.id)} title="Supprimer"/></div>);})}</div>
-        <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-ink-200 text-sm">
-          <div className="flex gap-3"><span className="text-ink-500">Fixes <b className="text-ink-700">{fmtE(totFixe)}</b></span><span className="text-ink-500">Variables <b className="text-ink-700">{fmtE(totVar)}</b></span></div>
+      <Card title="Dépenses récurrentes" sub="Classe chaque charge en fixe / variable. Le % indique son poids dans tes revenus ; les variables sont ton levier d'optimisation." right={<AjouterMenu options={SUGG_DEP.map(([label,cat])=>({label,pick:()=>addDepNamed(label,cat)}))} onBlank={()=>setMc("depenses",[...mc.depenses,{id:uid(),nom:"Nouvelle dépense",montant:0,cat:"variable"}])}/>}>
+        {["fixe","variable"].map(cat=>{const lignes=mc.depenses.filter(p=>(p.cat||"variable")===cat); if(lignes.length===0)return null;
+          const stot=sum(lignes,x=>x.montant);
+          return (<div key={cat} className="mb-3">
+            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-ink-400 px-1 mb-1"><span>{cat==="fixe"?"Coûts fixes":"Coûts variables"}</span><span>{fmtE(stot)}{c.revT>0?" · "+Math.round(stot/c.revT*100)+"%":""}</span></div>
+            <div className="space-y-2">{lignes.map(p=>(<div key={p.id} className="flex items-center gap-2">
+              <select value={p.cat||"variable"} onChange={e=>upd("depenses",p.id,{cat:e.target.value})} className="text-xs rounded-lg border border-ink-200 py-2 px-1.5 text-ink-600 bg-white"><option value="fixe">Fixe</option><option value="variable">Variable</option></select>
+              <div className="flex-1"><TextInput value={p.nom} onChange={v=>upd("depenses",p.id,{nom:v})}/></div>
+              {c.revT>0&&n(p.montant)>0&&<span className="text-[11px] text-ink-400 shrink-0 w-10 text-right" title="part de tes revenus">{Math.round(n(p.montant)/c.revT*100)}%</span>}
+              <Money value={p.montant} onChange={v=>upd("depenses",p.id,{montant:v})} className="w-28"/>
+              <IconBtn name="x" onClick={()=>del("depenses",p.id)} title="Supprimer"/></div>))}</div>
+          </div>);})}
+        {mc.depenses.length===0&&<div className="text-sm text-ink-400 py-2">Ajoute tes dépenses (le menu propose des catégories fixe / variable).</div>}
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-1 pt-3 border-t border-ink-200 text-sm">
           <span className="font-heading font-semibold text-ink-700">Total {fmtE(c.depCourante)}{deltaDep!=null&&<span className={"ml-1 text-xs font-normal "+(deltaDep>0?"text-red-500":"text-brand-600")}>({deltaDep>0?"+":""}{fmtP(deltaDep)} vs {moisCourt(moisPrec)})</span>}</span>
+          {c.revT>0&&<span className="text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5">{Math.round((1-c.depCourante/c.revT)*100)}% restant</span>}
         </div></Card>
     </div>
     <Card title="Dettes et crédits" sub="Un crédit a une mensualité (qui compte dans ton cashflow) ; une dette est de l'argent que tu dois (ex : un prêt d'un proche). Dans les deux cas, le capital restant est déduit de ton patrimoine." right={<AddBtn onClick={addC}>Ajouter</AddBtn>}>

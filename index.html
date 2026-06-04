@@ -1221,6 +1221,7 @@ function MdbTool({data,setData}){
       <KPI label="Bénéfice net (après IS)" value={fmtE(r.net)} tone={r.net>=0?"blue":"red"}/>
       <KPI label="Rentabilité / fonds propres" value={r.roe==null?"n.d.":fmtP(r.roe)} tone="blue"/>
     </div>
+    <div className="flex justify-end -mt-1"><button onClick={()=>exportDossierMdb(m,r,pointMort)} className="inline-flex items-center gap-2 text-sm font-medium text-brand-700 border border-brand-300 hover:bg-brand-50 px-4 py-2 rounded-xl cursor-pointer"><Icon name="down" className="w-4 h-4"/>Exporter le dossier (PDF)</button></div>
     <Controleur checks={mdbChecks(m,r,pointMort)}/>
     <Card title="Paramètres de l'opération" sub="Le régime de TVA découle de la nature du bien et de l'achat (modifiable).">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1383,6 +1384,24 @@ function exportDossierLocatif(m,r,am,pv,triVal){
     +'<h3>Financement</h3><table style="width:100%">'+row("Montant emprunte",fmtE(m.emprunt))+row("Mensualite (credit + assurance)",fmtE(r.mensualiteTot))+row("Cout total du credit",fmtE(am.coutTotal))+'</table>'
     +pvBloc
     +'<div class="big"><span>Cashflow annuel</span><span>'+fmtE(r.cashflowAn)+'</span></div>'
+    +'<p class="muted">Genere par Snowball Finance. Outil de calcul a but indicatif, ne constitue pas un conseil financier, fiscal ou juridique. Verifie les chiffres avant tout engagement.</p>'
+    +'</body></html>';
+  W.document.write(html); W.document.close(); W.focus(); setTimeout(function(){try{W.print();}catch(e){}},400);
+}
+// Export PDF du dossier d'operation marchand de biens.
+function exportDossierMdb(m,r,pointMort){
+  const W=window.open('','_blank','width=820,height=900'); if(!W) return;
+  const STYLE='body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:720px;margin:24px auto;padding:0 16px}h1{font-size:22px;margin-bottom:2px}h3{margin-top:22px;font-size:15px;border-bottom:2px solid #e2e8f0;padding-bottom:4px}table{border-collapse:collapse}.big{background:#0369a1;color:#fff;padding:14px 18px;border-radius:12px;margin-top:14px;display:flex;justify-content:space-between;align-items:center;font-size:18px;font-weight:700}.muted{color:#94a3b8;font-size:11px;margin-top:28px}';
+  const row=(l,v)=>'<tr><td style="padding:6px 0;color:#475569">'+l+'</td><td style="padding:6px 0;text-align:right;font-weight:600">'+v+'</td></tr>';
+  const lots=(m.lots||[]).map(l=>row(l.nom||"Lot",fmtE(l.prix))).join('');
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>Dossier operation marchand de biens</title><style>'+STYLE+'</style></head><body>'
+    +'<h1>Dossier d operation, marchand de biens</h1><div style="color:#64748b;font-size:13px">Snowball Finance</div>'
+    +'<h3>Synthese</h3><table style="width:100%">'+row("Regime de TVA",REGIME_LBL[r.regime])+row("Chiffre d affaires",fmtE(r.CA))+row("Cout de revient total",fmtE(r.coutTotal))+row("Benefice net (apres IS)",fmtE(r.net))+row("Marge nette sur CA",fmtP(r.margeCA))+(r.roe!=null?row("Rentabilite fonds propres",fmtP(r.roe)):"")+(r.rentAn!=null?row("Rentabilite annualisee",fmtP(r.rentAn)):"")+'</table>'
+    +'<h3>Acquisition et travaux</h3><table style="width:100%">'+row("Prix d achat",fmtE(m.prixAchat))+row("Frais d acquisition",fmtE(r.fraisAcq))+row("Prix de revient du foncier",fmtE(r.foncier))+row("Travaux et aleas"+(r.recup?" (HT)":" (TTC)"),fmtE(r.coutTechnique))+'</table>'
+    +'<h3>Financement</h3><table style="width:100%">'+row("Apport",fmtE(m.apport))+row("Montant emprunte",fmtE(m.emprunt))+row("Duree de portage",(n(m.dureeMois)||0)+" mois")+row("Frais financiers",fmtE(r.fraisFin))+'</table>'
+    +'<h3>Ventes</h3><table style="width:100%">'+lots+row("<b>Chiffre d affaires</b>","<b>"+fmtE(r.CA)+"</b>")+'</table>'
+    +'<h3>Resultat</h3><table style="width:100%">'+row("Resultat avant impot",fmtE(r.resultat))+(r.tvaMarge>0?row("TVA sur marge",fmtE(r.tvaMarge)):"")+row("Impot sur les societes",fmtE(r.is))+(pointMort!=null?row("Point mort (prix de revente)",fmtE(pointMort)):"")+'</table>'
+    +'<div class="big"><span>Benefice net</span><span>'+fmtE(r.net)+'</span></div>'
     +'<p class="muted">Genere par Snowball Finance. Outil de calcul a but indicatif, ne constitue pas un conseil financier, fiscal ou juridique. Verifie les chiffres avant tout engagement.</p>'
     +'</body></html>';
   W.document.write(html); W.document.close(); W.focus(); setTimeout(function(){try{W.print();}catch(e){}},400);

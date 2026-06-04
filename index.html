@@ -1290,6 +1290,32 @@ function amortissement(capital,tauxAnnuel,annees,assAnnuelPct){
   const totAss=assMois*N;
   return {rows:Object.values(years), totInt, totAss, mens, assMois, coutTotal:totInt+totAss, N};
 }
+// Plus-value immobiliere des particuliers : abattements pour duree de detention.
+function abattementIR(a){ if(a<6)return 0; let ab=(Math.min(a,21)-5)*0.06; if(a>=22)ab+=0.04; return Math.min(1,ab); } // exoneration a 22 ans
+function abattementPS(a){ if(a<6)return 0; let ab=(Math.min(a,21)-5)*0.0165; if(a>=22)ab+=0.016; if(a>22)ab+=(Math.min(a,30)-22)*0.09; return Math.min(1,ab); } // exoneration a 30 ans
+function surtaxePV(pv){ pv=n(pv); if(pv<=50000)return 0;
+  if(pv<=60000)return pv*0.02-(60000-pv)/20; if(pv<=100000)return pv*0.02;
+  if(pv<=110000)return pv*0.03-(110000-pv)/10; if(pv<=150000)return pv*0.03;
+  if(pv<=160000)return pv*0.04-(160000-pv)*15/100; if(pv<=200000)return pv*0.04;
+  if(pv<=210000)return pv*0.05-(210000-pv)*20/100; if(pv<=250000)return pv*0.05;
+  if(pv<=260000)return pv*0.06-(260000-pv)*25/100; return pv*0.06; }
+function plusValueRevente(m,am){
+  const prixAchat=n(m.prix), prixRevente=n(m.prixRevente), annees=Math.max(0,Math.round(n(m.dureeDetention)));
+  if(prixRevente<=0||prixAchat<=0||annees<=0) return null;
+  const fraisReels=prixAchat*n(m.notairePct)+n(m.fraisAgence);
+  const fraisRetenu=Math.max(fraisReels,0.075*prixAchat); // forfait 7,5% possible
+  const travauxRetenu=Math.max(n(m.travaux), annees>5?0.15*prixAchat:0); // forfait 15% si detention > 5 ans
+  const prixMajore=prixAchat+fraisRetenu+travauxRetenu;
+  const pvBrute=prixRevente-prixMajore;
+  const abIR=abattementIR(annees), abPS=abattementPS(annees);
+  const baseIR=Math.max(0,pvBrute*(1-abIR)), basePS=Math.max(0,pvBrute*(1-abPS));
+  const impotIR=baseIR*0.19, impotPS=basePS*0.172, surtaxe=pvBrute>0?surtaxePV(baseIR):0;
+  const impotTotal=pvBrute>0?(impotIR+impotPS+surtaxe):0;
+  const crd=(am&&am.rows&&am.rows.length)?( (am.rows[Math.min(annees,am.rows.length)-1]||{}).crd || (annees>=am.N?0:0) ):0;
+  const fraisVente=n(m.fraisVente);
+  const netEnPoche=prixRevente-crd-fraisVente-impotTotal;
+  return {prixMajore,pvBrute,abIR,abPS,baseIR,basePS,impotIR,impotPS,surtaxe,impotTotal,crd,fraisVente,netEnPoche,annees};
+}
 function bilanLocatif(m){
   m=m||{};
   const prix=n(m.prix),travaux=n(m.travaux),agence=n(m.fraisAgence),mobilier=n(m.mobilier);
@@ -1352,6 +1378,7 @@ function LocatifTool({data,setData}){
   const r=bilanLocatif(m);
   const [showAmort,setShowAmort]=useState(false);
   const am=amortissement(m.emprunt,m.tauxEmprunt,m.dureeAnnees,m.assEmprunteurPct);
+  const pv=plusValueRevente(m,am);
   const verdict = r.cashflowMois>=0&&r.netnet>=0.035 ? {t:"Bonne opération",c:"text-brand-700",d:"Cashflow positif et rendement net-net solide."}
     : r.cashflowMois>=-150 ? {t:"Opération équilibrée",c:"text-sky-700",d:"Effort d'épargne modéré, le bien s'autofinance presque."}
     : {t:"Effort d'épargne important",c:"text-amber-700",d:"Le bien coûte chaque mois ; à réserver à une forte conviction patrimoniale."};
@@ -1416,6 +1443,33 @@ function LocatifTool({data,setData}){
           <td className="text-right font-heading font-semibold text-ink-900">{fmtE(y.crd)}</td></tr>))}</tbody>
       </table></div>:<p className="text-xs text-ink-400 mt-3">Affiche le détail année par année (capital restant dû utile pour ta banque et pour calculer ta plus-value à la revente).</p>}
     </Card>}
+    <Card title="Plus-value à la revente" sub="Impôt sur la plus-value des particuliers (location nue ou meublée non pro) et net réellement encaissé après remboursement du prêt.">
+      <div className="grid sm:grid-cols-3 gap-4">
+        <FMoney m={m} set={set} l="Prix de revente envisagé" k="prixRevente"/>
+        <FMoney m={m} set={set} l="Durée de détention" k="dureeDetention" suffix="ans"/>
+        <FMoney m={m} set={set} l="Frais de vente (agence, diagnostics)" k="fraisVente"/>
+      </div>
+      {pv?<>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          <Mini label="Plus-value brute" v={fmtE(pv.pvBrute)} tone={pv.pvBrute>=0?"brand":"red"}/>
+          <Mini label="Abattement impôt" v={fmtP(pv.abIR)}/>
+          <Mini label="Abattement prélèv. sociaux" v={fmtP(pv.abPS)}/>
+          <Mini label="Impôt sur la plus-value" v={fmtE(pv.impotTotal)} tone="red"/>
+        </div>
+        <div className="mt-4"><PL rows={[
+          {l:"Prix de revente",v:m.prixRevente,sign:"+",tone:"brand"},
+          {l:"Capital restant dû du prêt",v:pv.crd,sign:"-"},
+          {l:"Frais de vente",v:pv.fraisVente,sign:"-"},
+          {l:"Impôt sur la plus-value (IR 19% + prélèvements 17,2%"+(pv.surtaxe>0?" + surtaxe":"")+")",v:pv.impotTotal,sign:"-",tone:"red"},
+          {l:"Net réellement encaissé",v:pv.netEnPoche,sign:"=",tone:pv.netEnPoche>=0?"brand":"red"},
+        ]}/></div>
+        <div className="mt-4 rounded-2xl p-4 text-white flex flex-wrap items-center justify-between gap-3" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+          <div><div className="text-brand-50 text-sm">Net en poche à la revente</div><div className="font-heading text-3xl font-bold">{fmtE(pv.netEnPoche)}</div></div>
+          <div className="text-right text-sm leading-relaxed"><div>Plus-value brute : <b>{fmtE(pv.pvBrute)}</b></div><div>Exonération totale d'impôt à 22 ans, de prélèvements sociaux à 30 ans</div></div>
+        </div>
+        <p className="text-xs text-ink-400 mt-3">Prix d'acquisition retenu : {fmtE(pv.prixMajore)} (prix + frais forfait 7,5% ou réel + travaux forfait 15% si détention &gt; 5 ans). Cas couvert : particulier, location nue ou meublée non professionnelle. La réforme 2025 réintègre les amortissements LMNP dans la plus-value (non pris en compte ici), et le marchand de biens relève d'un autre régime (voir le calculateur dédié).</p>
+      </>:<p className="text-sm text-ink-400 mt-4">Renseigne le prix de revente et la durée de détention pour estimer ta plus-value nette d'impôt.</p>}
+    </Card>
     <Card title="Fiscalité" sub="Le régime change fortement l'impôt, donc le cashflow net.">
       <div className="grid sm:grid-cols-2 gap-4">
         <Field label="Régime fiscal"><select value={m.regime||"microfoncier"} onChange={e=>set("regime",e.target.value)} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm">{Object.entries(LOCATIF_REG).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>

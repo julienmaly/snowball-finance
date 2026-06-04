@@ -1472,7 +1472,15 @@ function LocatifTool({data,setData}){
         <FMoney m={m} set={set} l="Frais d'agence" k="fraisAgence"/>
         <FMoney m={m} set={set} l="Mobilier (si meublé)" k="mobilier"/>
       </div>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <span className="text-xs text-ink-500">Notaire :</span>
+        <button onClick={()=>set("notairePct",0.08)} className="text-xs px-2.5 py-1 rounded-lg border border-ink-200 hover:bg-ink-100 cursor-pointer">Ancien 8%</button>
+        <button onClick={()=>set("notairePct",0.025)} className="text-xs px-2.5 py-1 rounded-lg border border-ink-200 hover:bg-ink-100 cursor-pointer">Neuf 2,5%</button>
+        <span className="text-xs text-ink-500 ml-3">DPE :</span>
+        <select value={m.dpe||""} onChange={e=>set("dpe",e.target.value)} className="text-xs rounded-lg border border-ink-200 py-1.5 px-2 text-ink-600 bg-white"><option value="">non renseigné</option>{["A","B","C","D","E","F","G"].map(x=><option key={x} value={x}>{x}</option>)}</select>
+      </div>
       <div className="text-sm text-ink-500 mt-3">Frais de notaire {fmtE(r.notaire)} · <b className="text-ink-700">Coût total d'acquisition {fmtE(r.coutTotal)}</b></div>
+      {["E","F","G"].includes(m.dpe)&&<div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3"><b>Passoire thermique (DPE {m.dpe}).</b> Location interdite {m.dpe==="G"?"depuis 2025":m.dpe==="F"?"à partir de 2028":"à partir de 2034"}. Prévois un budget de rénovation énergétique : impact direct sur la rentabilité et la valeur de revente.</div>}
       <p className="text-xs text-ink-400 mt-1">Notaire : environ 7 à 8% dans l'ancien, 2 à 3% dans le neuf.</p>
     </Card>
     <div className="grid lg:grid-cols-2 gap-5 items-start">

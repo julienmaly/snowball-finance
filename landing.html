@@ -163,6 +163,7 @@ tailwind.config={theme:{extend:{fontFamily:{heading:['Outfit','sans-serif'],sans
       </div>
       <button type="submit" class="w-full font-semibold bg-sky-600 hover:bg-sky-700 text-white px-6 py-3 rounded-xl shadow-lg shadow-sky-500/25 transition">Réserver ma place dans la bêta</button>
       <p class="text-xs text-slate-400 text-center">Aucun engagement. Tu seras prévenu en avant-première, au prix de lancement.</p>
+      <p id="wl-err" class="hidden text-xs text-red-500 text-center">Une erreur est survenue, réessaie dans un instant.</p>
     </form>
     <div id="wl-ok" class="hidden mt-6 text-center rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-800">Merci, tu es sur la liste. On te recontacte très vite pour l'accès anticipé.</div>
   </div>
@@ -193,10 +194,10 @@ tailwind.config={theme:{extend:{fontFamily:{heading:['Outfit','sans-serif'],sans
   var f=document.getElementById('wl');
   f.addEventListener('submit',function(e){
     e.preventDefault();
-    var data=new FormData(f);
-    fetch(f.action,{method:'POST',body:data,headers:{'Accept':'application/json'}})
-      .then(function(r){ f.classList.add('hidden'); document.getElementById('wl-ok').classList.remove('hidden'); })
-      .catch(function(){ f.classList.add('hidden'); document.getElementById('wl-ok').classList.remove('hidden'); });
+    var btn=f.querySelector('button[type=submit]'); btn.disabled=true; var lbl=btn.textContent; btn.textContent='Envoi...';
+    fetch(f.action,{method:'POST',body:new FormData(f),headers:{'Accept':'application/json'}})
+      .then(function(r){ if(!r.ok) throw 0; f.classList.add('hidden'); document.getElementById('wl-ok').classList.remove('hidden'); })
+      .catch(function(){ btn.disabled=false; btn.textContent=lbl; var er=document.getElementById('wl-err'); if(er) er.classList.remove('hidden'); });
   });
 </script>
 </body>

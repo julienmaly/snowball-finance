@@ -1467,6 +1467,11 @@ function LocatifTool({data,setData}){
   const set=(k,v)=>setData(d=>({...d,outilLocatif:{...(d.outilLocatif||{}),[k]:v}}));
   const r=bilanLocatif(m);
   const [showAmort,setShowAmort]=useState(false);
+  const saves=data.locatifSaves||[];
+  const saveCurrent=()=>setData(d=>({...d,locatifSaves:[...(d.locatifSaves||[]),{id:uid(),nom:"Bien "+((d.locatifSaves||[]).length+1),snap:{...(d.outilLocatif||{})}}]}));
+  const delSave=id=>setData(d=>({...d,locatifSaves:(d.locatifSaves||[]).filter(s=>s.id!==id)}));
+  const renSave=(id,nom)=>setData(d=>({...d,locatifSaves:(d.locatifSaves||[]).map(s=>s.id===id?{...s,nom}:s)}));
+  const loadSave=snap=>setData(d=>({...d,outilLocatif:{...snap}}));
   const am=amortissement(m.emprunt,m.tauxEmprunt,m.dureeAnnees,m.assEmprunteurPct);
   const pv=plusValueRevente(m,am);
   const triVal=(()=>{ const apport=n(m.apport), N=Math.max(0,Math.round(n(m.dureeDetention))); if(apport<=0||N<=0||!pv) return null;
@@ -1605,6 +1610,20 @@ function LocatifTool({data,setData}){
       </div>
       <div className={"mt-3 font-heading font-semibold "+verdict.c}>{verdict.t}</div>
       <p className="text-xs text-ink-400 mt-1">{verdict.d} Repère : une rentabilité nette-nette au-dessus de 3,5 à 4% avec un cashflow proche de l'équilibre constitue une bonne base. L'enrichissement réel inclut le capital que ton locataire rembourse à ta place.</p>
+    </Card>
+    <Card title="Comparer plusieurs biens" sub="Sauvegarde tes simulations pour les comparer côte à côte et choisir la meilleure opération." right={<AddBtn onClick={saveCurrent}>Sauvegarder cette simulation</AddBtn>}>
+      {saves.length===0?<p className="text-sm text-ink-400">Aucune simulation sauvegardée. Renseigne un bien ci-dessus puis clique sur « Sauvegarder cette simulation » : tu pourras en saisir un autre et les comparer.</p>:(()=>{
+        const comp=saves.map(s=>({s,b:bilanLocatif(s.snap)})); const bestNN=Math.max(...comp.map(c=>c.b.netnet));
+        return (<div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="text-ink-400 text-left"><th className="py-2 font-medium">Bien</th><th className="text-right font-medium">Prix</th><th className="text-right font-medium">Net-net</th><th className="text-right font-medium">Cashflow / mois</th><th></th></tr></thead>
+          <tbody>{comp.map(({s,b})=>{const best=b.netnet===bestNN&&bestNN>0; return(<tr key={s.id} className={"border-t border-ink-100 "+(best?"bg-brand-50/50":"")}>
+            <td className="py-1.5"><input value={s.nom} onChange={e=>renSave(s.id,e.target.value)} className="w-32 px-2 py-1 rounded-lg border border-ink-200 text-ink-800 outline-none focus:border-brand-400"/></td>
+            <td className="text-right">{fmtE(s.snap.prix)}</td>
+            <td className={"text-right font-medium "+(best?"text-brand-700":"text-ink-700")}>{fmtP(b.netnet)}{best?" ★":""}</td>
+            <td className={"text-right "+(b.cashflowMois>=0?"text-brand-700":"text-red-500")}>{fmtE(b.cashflowMois)}</td>
+            <td className="text-right whitespace-nowrap"><button onClick={()=>loadSave(s.snap)} className="text-xs text-brand-700 hover:underline cursor-pointer mr-2">Charger</button><button onClick={()=>delSave(s.id)} className="text-xs text-ink-400 hover:text-red-500 cursor-pointer">Suppr.</button></td>
+          </tr>);})}</tbody>
+        </table><p className="text-xs text-ink-400 mt-3">★ meilleure rentabilité nette-nette. « Charger » réinjecte la simulation ci-dessus pour la modifier.</p></div>);})()}
     </Card>
   </div>);
 }

@@ -121,7 +121,9 @@ function defaultData(){
       apport:0, emprunt:0, tauxEmprunt:0.07, fraisDossier:0, honoVentePct:0.04, lots:[{id:uid(),nom:"Lot 1",prix:0}] },
     outilLocatif:{ regime:"lmnp", prix:0, notairePct:0.075, travaux:0, fraisAgence:0, mobilier:0,
       loyerMensuel:0, taxeFonciere:0, coproAn:0, assurancePNO:0, gliPct:0, gestionPct:0, vacancePct:0.03, comptaAn:0,
-      apport:0, emprunt:0, tauxEmprunt:0.04, assEmprunteurPct:0.003, dureeAnnees:20, tmi:0.3 },
+      apport:0, emprunt:0, tauxEmprunt:0.04, assEmprunteurPct:0.003, dureeAnnees:20, tmi:0.3,
+      prixRevente:0, dureeDetention:10, fraisVente:0 },
+    outilEmprunt:{ revenus:0, loyersExistants:0, creditsExistants:0, tauxEmprunt:0.04, dureeAnnees:25, assEmprunteurPct:0.003, tauxEndettement:0.35 },
   };
 }
 let CAME_FROM_STORAGE=false;
@@ -132,6 +134,8 @@ function loadData(){ try{ const s=localStorage.getItem(KEY); if(s){const d=JSON.
     d.biens.forEach(b=>{ if(b.fraisNotaire==null&&b.fraisAgence==null){ b.fraisNotaire=n(b.fraisAcq); b.fraisAgence=0; } if(b.fraisCredit==null)b.fraisCredit=0; });
     if(!d.outilMdb)d.outilMdb={bienNeuf:false,achatTaxe:false,regimeOverride:"auto",tauxTVA:0.2,isReduit:true,dureeMois:12,prixAchat:0,fraisAcqPct:0.025,indemniteEviction:0,apporteur:0,vrd:0,grosOeuvre:0,travauxNeufs:0,equipement:0,honoTech:0,raccordements:0,aleasPct:0.06,honoGestion:0,honoCompta:0,honoJustice:0,doPct:0,gfaPct:0,apport:0,emprunt:0,tauxEmprunt:0.07,fraisDossier:0,honoVentePct:0.04,lots:[{id:uid(),nom:"Lot 1",prix:0}]};
     if(!d.outilLocatif)d.outilLocatif={regime:"lmnp",prix:0,notairePct:0.075,travaux:0,fraisAgence:0,mobilier:0,loyerMensuel:0,taxeFonciere:0,coproAn:0,assurancePNO:0,gliPct:0,gestionPct:0,vacancePct:0.03,comptaAn:0,apport:0,emprunt:0,tauxEmprunt:0.04,assEmprunteurPct:0.003,dureeAnnees:20,tmi:0.3};
+    if(d.outilLocatif&&d.outilLocatif.dureeDetention==null)d.outilLocatif.dureeDetention=10;
+    if(!d.outilEmprunt)d.outilEmprunt={revenus:0,loyersExistants:0,creditsExistants:0,tauxEmprunt:0.04,dureeAnnees:25,assEmprunteurPct:0.003,tauxEndettement:0.35};
     if(!d.projection||!d.projection.mensuel) d.projection={annee:new Date().getFullYear()+1,rendement:0.08,mensuel:Array.from({length:12},()=>({rev:0,dep:0}))};
     return d; }} }catch(e){} return defaultData(); }
 
@@ -1077,7 +1081,8 @@ function bilanMdb(m, caMult, travMult){
 }
 const REGIME_LBL={total:"TVA sur le prix total",exoneration:"Exonération de TVA",marge:"TVA sur marge"};
 const OUTILS=[{key:"mdb",nom:"Marchand de biens",icon:"bank",desc:"Achat-revente : marge nette après TVA et IS"},
-  {key:"locatif",nom:"Rentabilité locative",icon:"home",desc:"Cashflow et rendement d'un bien loué"}];
+  {key:"locatif",nom:"Rentabilité locative",icon:"home",desc:"Cashflow, rendement, plus-value et TRI"},
+  {key:"emprunt",nom:"Capacité d'emprunt",icon:"wallet",desc:"Combien tu peux emprunter (règle HCSF)"}];
 /* Menu déroulant des outils, à droite de la navigation */
 function OutilsNav({active,outil,pick}){
   const [open,setOpen]=useState(false);
@@ -1132,6 +1137,47 @@ function Outils({outil,setOutil,data,setData}){
     </div>
     {outil==="mdb"&&<MdbTool data={data} setData={setData}/>}
     {outil==="locatif"&&<LocatifTool data={data} setData={setData}/>}
+    {outil==="emprunt"&&<CapaciteTool data={data} setData={setData}/>}
+  </div>);
+}
+function CapaciteTool({data,setData}){
+  const m=data.outilEmprunt||{};
+  const set=(k,v)=>setData(d=>({...d,outilEmprunt:{...(d.outilEmprunt||{}),[k]:v}}));
+  const endett=n(m.tauxEndettement)||0.35;
+  const revPond=n(m.revenus)+0.7*n(m.loyersExistants);
+  const mensuMax=Math.max(0, revPond*endett - n(m.creditsExistants));
+  const t=n(m.tauxEmprunt)/12, N=Math.round(n(m.dureeAnnees)*12);
+  const facteur=(N>0?(t?t/(1-Math.pow(1+t,-N)):1/N):0)+n(m.assEmprunteurPct)/12;
+  const capacite=facteur>0?mensuMax/facteur:0;
+  const endettResultant=revPond>0?(n(m.creditsExistants)+mensuMax)/revPond:0;
+  const resteAVivre=(n(m.revenus)+n(m.loyersExistants))-n(m.creditsExistants)-mensuMax;
+  return (<div className="space-y-5">
+    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <KPI label="Capacité d'emprunt" value={fmtE(capacite)} icon="wallet" tone="blue"/>
+      <KPI label="Mensualité finançable" value={fmtE(mensuMax)+" / mois"} tone="blue"/>
+      <KPI label="Taux d'endettement" value={fmtP(endettResultant)} tone={endettResultant>endett+0.001?"red":"blue"}/>
+      <KPI label="Reste à vivre" value={fmtE(resteAVivre)+" / mois"} tone={resteAVivre>=0?"blue":"red"}/>
+    </div>
+    <Card title="Ta situation" sub="Revenus et charges pris en compte par la banque (règle HCSF).">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <FMoney m={m} set={set} l="Revenus nets mensuels (salaire...)" k="revenus"/>
+        <FMoney m={m} set={set} l="Loyers déjà perçus (comptés à 70%)" k="loyersExistants"/>
+        <FMoney m={m} set={set} l="Mensualités de crédits en cours" k="creditsExistants"/>
+      </div>
+    </Card>
+    <Card title="Le prêt envisagé">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <FPct m={m} set={set} l="Taux d'intérêt annuel" k="tauxEmprunt"/>
+        <FMoney m={m} set={set} l="Durée" k="dureeAnnees" suffix="ans"/>
+        <FPct m={m} set={set} l="Assurance emprunteur (% / an)" k="assEmprunteurPct"/>
+        <FPct m={m} set={set} l="Taux d'endettement max" k="tauxEndettement"/>
+      </div>
+      <div className="mt-4 rounded-2xl p-4 text-white flex flex-wrap items-center justify-between gap-3" style={{background:"linear-gradient(135deg,#38bdf8,#0369a1)"}}>
+        <div><div className="text-brand-50 text-sm">Tu peux emprunter environ</div><div className="font-heading text-3xl font-bold">{fmtE(capacite)}</div></div>
+        <div className="text-right text-sm leading-relaxed"><div>Mensualité : <b>{fmtE(mensuMax)}</b> / mois</div><div>sur {n(m.dureeAnnees)||0} ans à {fmtP(n(m.tauxEmprunt))}</div></div>
+      </div>
+      <p className="text-xs text-ink-400 mt-3">Règle HCSF : taux d'endettement plafonné à 35% (assurance comprise), durée généralement limitée à 25 ans, loyers existants retenus à 70%. Estimation indicative : chaque banque a sa politique. Pense à garder de quoi payer les frais de notaire (environ 8% dans l'ancien) avec ton apport.</p>
+    </Card>
   </div>);
 }
 function mdbChecks(m,r,pointMort){
@@ -1316,6 +1362,31 @@ function plusValueRevente(m,am){
   const netEnPoche=prixRevente-crd-fraisVente-impotTotal;
   return {prixMajore,pvBrute,abIR,abPS,baseIR,basePS,impotIR,impotPS,surtaxe,impotTotal,crd,fraisVente,netEnPoche,annees};
 }
+// TRI (taux de rentabilite interne) par bissection sur une serie de flux (flux[0] = investissement initial, negatif).
+function tri(flux){
+  const npv=r=>flux.reduce((s,f,i)=>s+n(f)/Math.pow(1+r,i),0);
+  let lo=-0.95, hi=1.5; const a=npv(lo), b=npv(hi);
+  if(!isFinite(a)||!isFinite(b)||a*b>0) return null;
+  for(let k=0;k<200;k++){ const mid=(lo+hi)/2, v=npv(mid); if(Math.abs(v)<0.5) return mid; if(npv(lo)*v<0) hi=mid; else lo=mid; }
+  return (lo+hi)/2;
+}
+// Export PDF du dossier de rentabilite (impression navigateur, sans dependance).
+function exportDossierLocatif(m,r,am,pv,triVal){
+  const W=window.open('','_blank','width=820,height=900'); if(!W) return;
+  const row=(l,v)=>'<tr><td style="padding:6px 0;color:#475569">'+l+'</td><td style="padding:6px 0;text-align:right;font-weight:600">'+v+'</td></tr>';
+  const pvBloc=pv?'<h3>Revente (a '+pv.annees+' ans)</h3><table style="width:100%">'+row("Prix de revente envisage",fmtE(m.prixRevente))+row("Plus-value brute",fmtE(pv.pvBrute))+row("Impot sur la plus-value",fmtE(pv.impotTotal))+row("Capital restant du",fmtE(pv.crd))+row("Net en poche a la revente",fmtE(pv.netEnPoche))+(triVal!=null?row("TRI sur "+pv.annees+" ans",fmtP(triVal)):"")+'</table>':"";
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>Dossier de rentabilite locative</title>'
+    +'<style>body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:720px;margin:24px auto;padding:0 16px}h1{font-size:22px;margin-bottom:2px}h3{margin-top:22px;font-size:15px;border-bottom:2px solid #e2e8f0;padding-bottom:4px}table{border-collapse:collapse}.big{background:#0369a1;color:#fff;padding:14px 18px;border-radius:12px;margin-top:14px;display:flex;justify-content:space-between;align-items:center;font-size:18px;font-weight:700}.muted{color:#94a3b8;font-size:11px;margin-top:28px}</style></head><body>'
+    +'<h1>Dossier de rentabilite locative</h1><div style="color:#64748b;font-size:13px">Snowball Finance</div>'
+    +'<h3>Le bien</h3><table style="width:100%">'+row("Prix d achat",fmtE(m.prix))+row("Frais de notaire et agence",fmtE(n(m.prix)*n(m.notairePct)+n(m.fraisAgence)))+row("Travaux",fmtE(m.travaux))+row("Loyer mensuel hors charges",fmtE(m.loyerMensuel))+'</table>'
+    +'<h3>Rentabilite</h3><table style="width:100%">'+row("Rendement brut",fmtP(r.brut))+row("Rendement net",fmtP(r.net))+row("Rendement net-net (apres impot)",fmtP(r.netnet))+row("Cashflow mensuel",fmtE(r.cashflowMois))+'</table>'
+    +'<h3>Financement</h3><table style="width:100%">'+row("Montant emprunte",fmtE(m.emprunt))+row("Mensualite (credit + assurance)",fmtE(r.mensualiteTot))+row("Cout total du credit",fmtE(am.coutTotal))+'</table>'
+    +pvBloc
+    +'<div class="big"><span>Cashflow annuel</span><span>'+fmtE(r.cashflowAn)+'</span></div>'
+    +'<p class="muted">Genere par Snowball Finance. Outil de calcul a but indicatif, ne constitue pas un conseil financier, fiscal ou juridique. Verifie les chiffres avant tout engagement.</p>'
+    +'</body></html>';
+  W.document.write(html); W.document.close(); W.focus(); setTimeout(function(){try{W.print();}catch(e){}},400);
+}
 function bilanLocatif(m){
   m=m||{};
   const prix=n(m.prix),travaux=n(m.travaux),agence=n(m.fraisAgence),mobilier=n(m.mobilier);
@@ -1379,6 +1450,8 @@ function LocatifTool({data,setData}){
   const [showAmort,setShowAmort]=useState(false);
   const am=amortissement(m.emprunt,m.tauxEmprunt,m.dureeAnnees,m.assEmprunteurPct);
   const pv=plusValueRevente(m,am);
+  const triVal=(()=>{ const apport=n(m.apport), N=Math.max(0,Math.round(n(m.dureeDetention))); if(apport<=0||N<=0||!pv) return null;
+    const flux=[-apport]; for(let y=1;y<=N;y++) flux.push(y===N? r.cashflowAn+pv.netEnPoche : r.cashflowAn); return tri(flux); })();
   const verdict = r.cashflowMois>=0&&r.netnet>=0.035 ? {t:"Bonne opération",c:"text-brand-700",d:"Cashflow positif et rendement net-net solide."}
     : r.cashflowMois>=-150 ? {t:"Opération équilibrée",c:"text-sky-700",d:"Effort d'épargne modéré, le bien s'autofinance presque."}
     : {t:"Effort d'épargne important",c:"text-amber-700",d:"Le bien coûte chaque mois ; à réserver à une forte conviction patrimoniale."};
@@ -1389,6 +1462,7 @@ function LocatifTool({data,setData}){
       <KPI label="Rentabilité nette-nette" value={fmtP(r.netnet)} tone="blue"/>
       <KPI label="Cashflow mensuel" value={fmtE(r.cashflowMois)} tone={r.cashflowMois>=0?"blue":"red"}/>
     </div>
+    <div className="flex justify-end -mt-1"><button onClick={()=>exportDossierLocatif(m,r,am,pv,triVal)} className="inline-flex items-center gap-2 text-sm font-medium text-brand-700 border border-brand-300 hover:bg-brand-50 px-4 py-2 rounded-xl cursor-pointer"><Icon name="down" className="w-4 h-4"/>Exporter le dossier (PDF)</button></div>
     <Controleur checks={locatifChecks(m,r)}/>
     <Card title="Le bien et son acquisition">
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1467,7 +1541,11 @@ function LocatifTool({data,setData}){
           <div><div className="text-brand-50 text-sm">Net en poche à la revente</div><div className="font-heading text-3xl font-bold">{fmtE(pv.netEnPoche)}</div></div>
           <div className="text-right text-sm leading-relaxed"><div>Plus-value brute : <b>{fmtE(pv.pvBrute)}</b></div><div>Exonération totale d'impôt à 22 ans, de prélèvements sociaux à 30 ans</div></div>
         </div>
-        <p className="text-xs text-ink-400 mt-3">Prix d'acquisition retenu : {fmtE(pv.prixMajore)} (prix + frais forfait 7,5% ou réel + travaux forfait 15% si détention &gt; 5 ans). Cas couvert : particulier, location nue ou meublée non professionnelle. La réforme 2025 réintègre les amortissements LMNP dans la plus-value (non pris en compte ici), et le marchand de biens relève d'un autre régime (voir le calculateur dédié).</p>
+        {triVal!=null&&<div className="grid grid-cols-2 gap-3 mt-4">
+          <Mini label={"TRI sur "+pv.annees+" ans"} v={fmtP(triVal)} tone={triVal>=0?"brand":"red"}/>
+          <Mini label="Rendement sur apport (an 1)" v={r.cashOnCash==null?"n.d.":fmtP(r.cashOnCash)} tone={(r.cashOnCash||0)>=0?"brand":"red"}/>
+        </div>}
+        <p className="text-xs text-ink-400 mt-3">Prix d'acquisition retenu : {fmtE(pv.prixMajore)} (prix + frais forfait 7,5% ou réel + travaux forfait 15% si détention &gt; 5 ans). Le TRI intègre ton apport, les cashflows annuels et le net de revente sur la durée de détention. Cas couvert : particulier, location nue ou meublée non professionnelle. La réforme 2025 réintègre les amortissements LMNP dans la plus-value (non pris en compte ici), et le marchand de biens relève d'un autre régime (voir le calculateur dédié).</p>
       </>:<p className="text-sm text-ink-400 mt-4">Renseigne le prix de revente et la durée de détention pour estimer ta plus-value nette d'impôt.</p>}
     </Card>
     <Card title="Fiscalité" sub="Le régime change fortement l'impôt, donc le cashflow net.">

@@ -1275,6 +1275,21 @@ function mensualite(capital,tauxAnnuel,annees){
   if(!t) return capital/N;
   return capital*t/(1-Math.pow(1+t,-N));
 }
+// Tableau d'amortissement agrege par annee. Assurance emprunteur calculee sur le capital initial (constante).
+function amortissement(capital,tauxAnnuel,annees,assAnnuelPct){
+  capital=n(capital); const N=Math.round(n(annees)*12); const t=n(tauxAnnuel)/12;
+  if(capital<=0||N<=0) return {rows:[],totInt:0,totAss:0,mens:0,coutTotal:0,N:0};
+  const mens=t?capital*t/(1-Math.pow(1+t,-N)):capital/N;
+  const assMois=capital*n(assAnnuelPct)/12;
+  let crd=capital, totInt=0; const years={};
+  for(let mo=1;mo<=N;mo++){
+    const interet=crd*t; let principal=(mo===N)?crd:(mens-interet); crd=Math.max(0,crd-principal); totInt+=interet;
+    const y=Math.ceil(mo/12); if(!years[y]) years[y]={annee:y,interets:0,principal:0,assurance:0,crd:0};
+    years[y].interets+=interet; years[y].principal+=principal; years[y].assurance+=assMois; years[y].crd=crd;
+  }
+  const totAss=assMois*N;
+  return {rows:Object.values(years), totInt, totAss, mens, assMois, coutTotal:totInt+totAss, N};
+}
 function bilanLocatif(m){
   m=m||{};
   const prix=n(m.prix),travaux=n(m.travaux),agence=n(m.fraisAgence),mobilier=n(m.mobilier);
@@ -1335,6 +1350,8 @@ function LocatifTool({data,setData}){
   const m=data.outilLocatif||{};
   const set=(k,v)=>setData(d=>({...d,outilLocatif:{...(d.outilLocatif||{}),[k]:v}}));
   const r=bilanLocatif(m);
+  const [showAmort,setShowAmort]=useState(false);
+  const am=amortissement(m.emprunt,m.tauxEmprunt,m.dureeAnnees,m.assEmprunteurPct);
   const verdict = r.cashflowMois>=0&&r.netnet>=0.035 ? {t:"Bonne opération",c:"text-brand-700",d:"Cashflow positif et rendement net-net solide."}
     : r.cashflowMois>=-150 ? {t:"Opération équilibrée",c:"text-sky-700",d:"Effort d'épargne modéré, le bien s'autofinance presque."}
     : {t:"Effort d'épargne important",c:"text-amber-700",d:"Le bien coûte chaque mois ; à réserver à une forte conviction patrimoniale."};
@@ -1382,6 +1399,23 @@ function LocatifTool({data,setData}){
         <div className="text-sm text-ink-500 mt-3">Mensualité crédit + assurance : <b className="text-ink-700">{fmtE(r.mensualiteTot)} / mois</b> <span className="text-ink-400">dont {fmtE(r.capital1/12)} de capital la 1re année</span></div>
       </Card>
     </div>
+    {am.N>0&&<Card title="Tableau d'amortissement du prêt" sub="Capital remboursé, intérêts et capital restant dû, année par année." right={<button onClick={()=>setShowAmort(s=>!s)} className="text-sm text-brand-700 font-medium hover:underline cursor-pointer">{showAmort?"Masquer le détail":"Afficher le détail"}</button>}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Mini label="Mensualité (hors assurance)" v={fmtE(am.mens)}/>
+        <Mini label="Total des intérêts" v={fmtE(am.totInt)} tone="red"/>
+        <Mini label="Total assurance" v={fmtE(am.totAss)} tone="red"/>
+        <Mini label="Coût total du crédit" v={fmtE(am.coutTotal)} tone="red"/>
+      </div>
+      {showAmort?<div className="overflow-x-auto mt-4"><table className="w-full text-sm">
+        <thead><tr className="text-ink-400 text-left"><th className="py-2 font-medium">Année</th><th className="font-medium text-right">Intérêts</th><th className="font-medium text-right">Capital remboursé</th><th className="font-medium text-right">Assurance</th><th className="font-medium text-right">Capital restant dû</th></tr></thead>
+        <tbody>{am.rows.map(y=>(<tr key={y.annee} className="border-t border-ink-100">
+          <td className="py-1.5 text-ink-700 font-medium">{y.annee}</td>
+          <td className="text-right text-red-500">{fmtE(y.interets)}</td>
+          <td className="text-right text-brand-700">{fmtE(y.principal)}</td>
+          <td className="text-right text-ink-500">{fmtE(y.assurance)}</td>
+          <td className="text-right font-heading font-semibold text-ink-900">{fmtE(y.crd)}</td></tr>))}</tbody>
+      </table></div>:<p className="text-xs text-ink-400 mt-3">Affiche le détail année par année (capital restant dû utile pour ta banque et pour calculer ta plus-value à la revente).</p>}
+    </Card>}
     <Card title="Fiscalité" sub="Le régime change fortement l'impôt, donc le cashflow net.">
       <div className="grid sm:grid-cols-2 gap-4">
         <Field label="Régime fiscal"><select value={m.regime||"microfoncier"} onChange={e=>set("regime",e.target.value)} className="w-full px-3 py-2 rounded-xl border border-ink-200 bg-white text-sm">{Object.entries(LOCATIF_REG).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>

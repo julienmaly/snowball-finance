@@ -59,6 +59,8 @@ const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","
 const moisLong = ym => { if(!ym) return ""; const [y,m]=ym.split("-"); return MOIS[+m-1]+" "+y; };
 const moisCourt = ym => { const [y,m]=ym.split("-"); return MOIS[+m-1].slice(0,4)+". "+y.slice(2); };
 const nowYM = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); };
+/* mois par défaut = le dernier mois terminé (on saisit un mois une fois qu'il est fini, salaire reçu). Ex : le 1er juillet -> juin. */
+const prevYM = () => { const d=new Date(); const m=d.getMonth(); return (m===0?d.getFullYear()-1:d.getFullYear())+"-"+String(m===0?12:m).padStart(2,"0"); };
 
 const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function useCountUp(value){
@@ -99,7 +101,7 @@ function Snowflake({className="w-7 h-7"}){
 
 /* défauts neutres */
 function defaultData(){
-  const ym=nowYM();
+  const ym=prevYM();
   return { version:4,
     params:{ eurusd:1.08, objectifEUR:1000000, retraitFI:0.04, cibleFondsMois:6 },
     patrimoine:[
@@ -347,8 +349,8 @@ function App(){
       if(d&&d.params && (!CAME_FROM_STORAGE || n(d.updatedAt)>n(data.updatedAt))){ setData(d); setSavedSnap(JSON.stringify(d)); flash("Données synchronisées depuis GitHub"); } } }).catch(()=>{}); } },[]);
   const dirty = ghReady && savedSnap && JSON.stringify(data)!==savedSnap;
 
-  /* ouverture : mois en cours */
-  useEffect(()=>{ setData(d=>{ const ym=nowYM(); if(d.mois[ym]) return {...d,moisActif:ym};
+  /* ouverture : on se place sur le dernier mois terminé (le mois qu'on clôture) */
+  useEffect(()=>{ setData(d=>{ const ym=prevYM(); if(d.mois[ym]) return {...d,moisActif:ym};
     const keys=Object.keys(d.mois).sort(); const src=d.mois[keys[keys.length-1]]||{revenus:[],depenses:[]};
     const cl=a=>(a||[]).map(x=>({...x,id:uid()}));
     return {...d,moisActif:ym,mois:{...d.mois,[ym]:{revenus:cl(carryRev(src.revenus)),depenses:cl(carryDep(src.depenses))}}}; }); },[]);
@@ -391,7 +393,7 @@ function App(){
       ratioFI:depT?revP/depT:0, capitalFI:data.params.retraitFI?(depT*12)/data.params.retraitFI:0, fondsMois:depT?cash/depT:0 };
   },[data,mc]);
 
-  useEffect(()=>{ const ym=nowYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.dispo) return d;
+  useEffect(()=>{ const ym=prevYM(); setData(d=>{ if((d.snapshots||{})[ym]===c.dispo) return d;
     return {...d,snapshots:{...(d.snapshots||{}),[ym]:c.dispo}}; }); },[c.dispo]);
 
   const alloc=useMemo(()=>{ const m={}; data.patrimoine.forEach(a=>{m[a.classe]=(m[a.classe]||0)+n(a.montant);});
@@ -406,7 +408,7 @@ function App(){
   const doImport=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
     r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.params){setData(d);flash("Données importées");} else flash("Fichier invalide"); }catch(err){flash("Erreur de lecture");} };
     r.readAsText(f); };
-  const loadDemo=()=>{ const d=demoData(); d.moisActif=nowYM(); setData(d); setTab("dashboard"); flash("Exemple chargé : explore librement"); };
+  const loadDemo=()=>{ const d=demoData(); d.moisActif=prevYM(); setData(d); setTab("dashboard"); flash("Exemple chargé : explore librement"); };
   const resetVierge=()=>{ const d=defaultData(); setData(d); setTab("dashboard"); flash("Reparti de zéro"); };
   const hasData=(data.patrimoine||[]).some(a=>n(a.montant)>0)||(data.biens||[]).length>0||Object.values(data.mois||{}).some(m=>(m.revenus||[]).some(r=>n(r.montant)>0)||(m.depenses||[]).some(x=>n(x.montant)>0));
 
@@ -636,10 +638,10 @@ function GuideDemarrage({data,setData,ghReady,go,openAssistant,loadDemo,hasData}
 
 /* Suivi mensuel récurrent */
 function SuiviMensuel({data,setData,go,ghMaj}){
-  const ym=nowYM();
+  const ym=prevYM();
   const r=(data.routine&&data.routine[ym])||{};
   const toggle=k=>setData(d=>{const ro={...(d.routine||{})}; const cur={...(ro[ym]||{})}; cur[k]=!cur[k]; ro[ym]=cur; return {...d,routine:ro};});
-  const savedThisMonth=(ghMaj||"").slice(0,7)===ym;
+  const savedThisMonth=(ghMaj||"").slice(0,7)===nowYM();  /* la sauvegarde se fait à la vraie date du jour, pas au mois clôturé */
   const items=[
     {k:"cashflow",fait:!!r.cashflow,label:"Mettre à jour mes revenus et dépenses",tab:"cashflow"},
     {k:"patrimoine",fait:!!r.patrimoine,label:"Actualiser la valeur de mon patrimoine",tab:"patrimoine"},
@@ -1713,7 +1715,7 @@ function Cashflow({data,setData,mc,setMc,moisActif,c}){
     <Card><div className="flex flex-wrap items-center gap-3">
       <label className="text-sm text-ink-600 font-medium">Mois :</label>
       <input type="month" value={moisActif} onChange={e=>changeMois(e.target.value)} className="px-3 py-2 rounded-xl border border-ink-200 bg-white focus:border-brand-400 outline-none"/>
-      <span className="text-xs text-ink-400">{mois.length} mois enregistré{mois.length>1?"s":""}. À l'ouverture, l'app se place sur le mois en cours.</span>
+      <span className="text-xs text-ink-400">{mois.length} mois enregistré{mois.length>1?"s":""}. À l'ouverture, l'app se place sur le dernier mois terminé (celui que tu clôtures).</span>
       <div className="ml-auto flex gap-4 text-sm flex-wrap">
         <span className="text-ink-500">Revenus <b className="text-brand-700">{fmtE(c.revT)}</b></span>
         <span className="text-ink-500">Dépenses <b className="text-red-500">{fmtE(c.depCourante)}</b></span>
